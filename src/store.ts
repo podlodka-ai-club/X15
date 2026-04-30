@@ -12,6 +12,14 @@ export type CartSummary = {
   label: string;
 };
 
+export type PriceSort = 'featured' | 'price-asc' | 'price-desc';
+
+export type CatalogQuery = {
+  category: string;
+  searchText: string;
+  priceSort: PriceSort;
+};
+
 export const products: Product[] = [
   {
     id: 'field-jacket',
@@ -51,6 +59,41 @@ export function getCartSummary(availableProducts: Product[]): CartSummary {
     subtotalCents: 0,
     label: 'Cart summary placeholder',
   };
+}
+
+export function getProductCategories(productList: Product[]): string[] {
+  return Array.from(new Set(productList.map((product) => product.category)));
+}
+
+export function applyCatalogQuery(
+  productList: Product[],
+  query: CatalogQuery,
+): Product[] {
+  const normalizedSearch = query.searchText.trim().toLowerCase();
+
+  const filteredProducts = productList.filter((product) => {
+    const matchesCategory =
+      query.category === '' || product.category === query.category;
+    const matchesSearch =
+      normalizedSearch === '' ||
+      [product.name, product.description, product.category].some((value) =>
+        value.toLowerCase().includes(normalizedSearch),
+      );
+
+    return matchesCategory && matchesSearch;
+  });
+
+  return [...filteredProducts].sort((firstProduct, secondProduct) => {
+    if (query.priceSort === 'price-asc') {
+      return firstProduct.priceCents - secondProduct.priceCents;
+    }
+
+    if (query.priceSort === 'price-desc') {
+      return secondProduct.priceCents - firstProduct.priceCents;
+    }
+
+    return 0;
+  });
 }
 
 export function formatPrice(priceCents: number): string {

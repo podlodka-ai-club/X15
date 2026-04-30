@@ -1,5 +1,13 @@
 import './styles.css';
-import { formatPrice, getCartSummary, products, type Product } from './store';
+import {
+  applyCatalogQuery,
+  formatPrice,
+  getCartSummary,
+  getProductCategories,
+  products,
+  type CatalogQuery,
+  type Product,
+} from './store';
 
 function createTextElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -30,10 +38,22 @@ function createProductCard(product: Product): HTMLElement {
   return card;
 }
 
+function createSelectOption(value: string, text: string): HTMLOptionElement {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = text;
+  return option;
+}
+
 function renderProducts(productList: Product[]): HTMLElement {
   const section = document.createElement('section');
   section.className = 'product-section';
   section.setAttribute('aria-labelledby', 'products-heading');
+  const query: CatalogQuery = {
+    category: '',
+    searchText: '',
+    priceSort: 'featured',
+  };
 
   const heading = createTextElement(
     'h2',
@@ -42,13 +62,105 @@ function renderProducts(productList: Product[]): HTMLElement {
   );
   heading.id = 'products-heading';
 
+  const controls = document.createElement('div');
+  controls.className = 'catalog-controls';
+
+  const searchLabel = createTextElement(
+    'label',
+    'catalog-controls__label',
+    'Search',
+  );
+  const searchInput = document.createElement('input');
+  searchInput.className = 'catalog-controls__field';
+  searchInput.id = 'catalog-search';
+  searchInput.type = 'search';
+  searchInput.placeholder = 'Search products';
+  searchLabel.htmlFor = searchInput.id;
+
+  const categoryLabel = createTextElement(
+    'label',
+    'catalog-controls__label',
+    'Category',
+  );
+  const categorySelect = document.createElement('select');
+  categorySelect.className = 'catalog-controls__field';
+  categorySelect.id = 'catalog-category';
+  categorySelect.append(createSelectOption('', 'All categories'));
+  getProductCategories(productList).forEach((category) => {
+    categorySelect.append(createSelectOption(category, category));
+  });
+  categoryLabel.htmlFor = categorySelect.id;
+
+  const sortLabel = createTextElement(
+    'label',
+    'catalog-controls__label',
+    'Sort',
+  );
+  const sortSelect = document.createElement('select');
+  sortSelect.className = 'catalog-controls__field';
+  sortSelect.id = 'catalog-sort';
+  sortSelect.append(
+    createSelectOption('featured', 'Featured'),
+    createSelectOption('price-asc', 'Price: low to high'),
+    createSelectOption('price-desc', 'Price: high to low'),
+  );
+  sortLabel.htmlFor = sortSelect.id;
+
+  controls.append(
+    searchLabel,
+    searchInput,
+    categoryLabel,
+    categorySelect,
+    sortLabel,
+    sortSelect,
+  );
+
+  const resultCount = createTextElement('p', 'catalog-results', '');
+
   const grid = document.createElement('div');
   grid.className = 'product-grid';
-  productList.forEach((product) => {
-    grid.append(createProductCard(product));
+
+  function updateProductGrid(): void {
+    const matchingProducts = applyCatalogQuery(productList, query);
+    grid.replaceChildren();
+    resultCount.textContent = `${matchingProducts.length} product${
+      matchingProducts.length === 1 ? '' : 's'
+    } found`;
+
+    if (matchingProducts.length === 0) {
+      grid.append(
+        createTextElement(
+          'p',
+          'catalog-empty',
+          'No products match your filters.',
+        ),
+      );
+      return;
+    }
+
+    matchingProducts.forEach((product) => {
+      grid.append(createProductCard(product));
+    });
+  }
+
+  searchInput.addEventListener('input', () => {
+    query.searchText = searchInput.value;
+    updateProductGrid();
   });
 
-  section.append(heading, grid);
+  categorySelect.addEventListener('change', () => {
+    query.category = categorySelect.value;
+    updateProductGrid();
+  });
+
+  sortSelect.addEventListener('change', () => {
+    query.priceSort = sortSelect.value as CatalogQuery['priceSort'];
+    updateProductGrid();
+  });
+
+  updateProductGrid();
+
+  section.append(heading, controls, resultCount, grid);
   return section;
 }
 
