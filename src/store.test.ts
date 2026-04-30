@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addCartItem,
   applyCatalogQuery,
+  createOrderConfirmation,
   formatPrice,
   getCartSummary,
   getProductCategories,
   products,
+  removeCartItem,
+  updateCartItemQuantity,
+  validateCheckout,
   type CatalogQuery,
+  type CartItem,
+  type CheckoutDetails,
 } from './store';
 
 const defaultQuery: CatalogQuery = {
@@ -28,13 +35,165 @@ describe('products', () => {
   });
 });
 
+describe('cart item helpers', () => {
+  it('adds a new item and increments an existing item', () => {
+    const cartItems = addCartItem([], 'field-jacket');
+    const updatedCartItems = addCartItem(cartItems, 'field-jacket');
+
+    expect(cartItems).toEqual([{ productId: 'field-jacket', quantity: 1 }]);
+    expect(updatedCartItems).toEqual([
+      { productId: 'field-jacket', quantity: 2 },
+    ]);
+  });
+
+  it('removes a matching item and leaves other items unchanged', () => {
+    const cartItems: CartItem[] = [
+      { productId: 'field-jacket', quantity: 1 },
+      { productId: 'canvas-tote', quantity: 2 },
+    ];
+
+    expect(removeCartItem(cartItems, 'field-jacket')).toEqual([
+      { productId: 'canvas-tote', quantity: 2 },
+    ]);
+    expect(removeCartItem(cartItems, 'missing-product')).toEqual(cartItems);
+  });
+
+  it('updates a positive quantity and removes at zero', () => {
+    const cartItems: CartItem[] = [{ productId: 'field-jacket', quantity: 1 }];
+
+    expect(updateCartItemQuantity(cartItems, 'field-jacket', 3)).toEqual([
+      { productId: 'field-jacket', quantity: 3 },
+    ]);
+    expect(updateCartItemQuantity(cartItems, 'field-jacket', 0)).toEqual([]);
+  });
+});
+
 describe('getCartSummary', () => {
-  it('returns a deterministic cart placeholder summary', () => {
-    expect(getCartSummary(products)).toEqual({
+  it('returns an empty cart summary with zero totals', () => {
+    expect(getCartSummary([], products)).toEqual({
+      items: [],
       itemCount: 0,
       subtotalCents: 0,
-      label: 'Cart summary placeholder',
+      shippingCents: 0,
+      taxCents: 0,
+      totalCents: 0,
+      label: 'Your cart is empty',
     });
+  });
+
+  it('returns line items, subtotal, shipping, tax, and total', () => {
+    const summary = getCartSummary(
+      [
+        { productId: 'field-jacket', quantity: 1 },
+        { productId: 'canvas-tote', quantity: 2 },
+        { productId: 'unknown-product', quantity: 4 },
+      ],
+      products,
+    );
+
+    expect(summary).toEqual({
+      items: [
+        {
+          product: products[0],
+          quantity: 1,
+          lineTotalCents: 12800,
+        },
+        {
+          product: products[1],
+          quantity: 2,
+          lineTotalCents: 8400,
+        },
+      ],
+      itemCount: 3,
+      subtotalCents: 21200,
+      shippingCents: 599,
+      taxCents: 1749,
+      totalCents: 23548,
+      label: 'Ready for checkout',
+    });
+  });
+});
+
+describe('validateCheckout', () => {
+  it('returns field errors for invalid checkout details', () => {
+    expect(
+      validateCheckout({
+        name: ' ',
+        email: 'not-an-email',
+        shippingAddress: '',
+      }),
+    ).toEqual({
+      valid: false,
+      errors: {
+        name: 'Enter your name.',
+        email: 'Enter a valid email address.',
+        shippingAddress: 'Enter a shipping address.',
+      },
+    });
+  });
+
+  it('accepts trimmed valid checkout details', () => {
+    expect(
+      validateCheckout({
+        name: ' Ada Lovelace ',
+        email: 'ada@example.com ',
+        shippingAddress: ' 123 Market Street ',
+      }),
+    ).toEqual({
+      valid: true,
+      errors: {},
+    });
+  });
+});
+
+describe('createOrderConfirmation', () => {
+  const details: CheckoutDetails = {
+    name: 'Ada Lovelace',
+    email: 'ada@example.com',
+    shippingAddress: '123 Market Street',
+  };
+
+  it('returns the same id for the same details and cart regardless of item order', () => {
+    const firstConfirmation = createOrderConfirmation(
+      details,
+      [
+        { productId: 'field-jacket', quantity: 1 },
+        { productId: 'canvas-tote', quantity: 2 },
+      ],
+      products,
+    );
+    const secondConfirmation = createOrderConfirmation(
+      details,
+      [
+        { productId: 'canvas-tote', quantity: 2 },
+        { productId: 'field-jacket', quantity: 1 },
+      ],
+      products,
+    );
+
+    expect(secondConfirmation).toEqual(firstConfirmation);
+    expect(firstConfirmation).toEqual({
+      confirmationId: expect.stringMatching(/^X15-[0-9A-Z]+$/),
+      itemCount: 3,
+      totalCents: 23548,
+    });
+  });
+
+  it('changes the id when confirmation inputs change', () => {
+    const firstConfirmation = createOrderConfirmation(
+      details,
+      [{ productId: 'field-jacket', quantity: 1 }],
+      products,
+    );
+    const secondConfirmation = createOrderConfirmation(
+      { ...details, email: 'grace@example.com' },
+      [{ productId: 'field-jacket', quantity: 1 }],
+      products,
+    );
+
+    expect(secondConfirmation.confirmationId).not.toBe(
+      firstConfirmation.confirmationId,
+    );
   });
 });
 
