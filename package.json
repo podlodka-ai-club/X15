@@ -1,0 +1,21 @@
+{
+  "name": "x15-storefront-skeleton",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "type-check": "if find src -name '*.ts' -print -quit 2>/dev/null | grep -q .; then tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution Bundler --lib ESNext,DOM --types node $(find src -name '*.ts' -print); fi",
+    "lint": "npm run type-check",
+    "format:check": "prettier package.json index.html README.md 'src/**/*.{ts,css}' --check",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.4",
+    "vitest": "^3.1.2"
+  }
+}
