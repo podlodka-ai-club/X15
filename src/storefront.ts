@@ -25,6 +25,30 @@ export type CartItem = {
 export type CartSummary = {
   itemCount: number;
   subtotalCents: number;
+  shippingCents: number;
+  taxCents: number;
+  totalCents: number;
+};
+
+export type CheckoutDetails = {
+  name: string;
+  email: string;
+  shippingAddress: string;
+};
+
+export type CheckoutValidationResult = {
+  isValid: boolean;
+  errors: {
+    name?: string;
+    email?: string;
+    shippingAddress?: string;
+    cart?: string;
+  };
+};
+
+type CartBaseSummary = {
+  itemCount: number;
+  subtotalCents: number;
 };
 
 export const products: Product[] = [
@@ -97,13 +121,51 @@ export function getVisibleProducts(
   return filtered;
 }
 
-export function calculateCartSummary(
+export function addCartItem(
+  cartItems: CartItem[],
+  productId: string,
+): CartItem[] {
+  const existingItem = cartItems.find((item) => item.productId === productId);
+
+  if (!existingItem) {
+    return [...cartItems, { productId, quantity: 1 }];
+  }
+
+  return cartItems.map((item) =>
+    item.productId === productId
+      ? { ...item, quantity: item.quantity + 1 }
+      : item,
+  );
+}
+
+export function removeCartItem(
+  cartItems: CartItem[],
+  productId: string,
+): CartItem[] {
+  return cartItems.filter((item) => item.productId !== productId);
+}
+
+export function updateCartItemQuantity(
+  cartItems: CartItem[],
+  productId: string,
+  quantity: number,
+): CartItem[] {
+  if (quantity <= 0) {
+    return removeCartItem(cartItems, productId);
+  }
+
+  return cartItems.map((item) =>
+    item.productId === productId ? { ...item, quantity } : item,
+  );
+}
+
+function calculateCartBaseSummary(
   cartItems: CartItem[],
   catalog: Product[],
-): CartSummary {
+): CartBaseSummary {
   const catalogById = new Map(catalog.map((product) => [product.id, product]));
 
-  return cartItems.reduce<CartSummary>(
+  return cartItems.reduce<CartBaseSummary>(
     (summary, item) => {
       const product = catalogById.get(item.productId);
 
@@ -122,4 +184,135 @@ export function calculateCartSummary(
       subtotalCents: 0,
     },
   );
+}
+
+export function calculateCartSubtotal(
+  cartItems: CartItem[],
+  catalog: Product[],
+): number {
+  return calculateCartBaseSummary(cartItems, catalog).subtotalCents;
+}
+
+export function calculateShipping(subtotalCents: number): number {
+  return subtotalCents > 0 ? 500 : 0;
+}
+
+export function calculateTax(subtotalCents: number): number {
+  return Math.round(subtotalCents * 0.08);
+}
+
+export function calculateCartTotal(
+  cartItems: CartItem[],
+  catalog: Product[],
+): CartSummary {
+  const baseSummary = calculateCartBaseSummary(cartItems, catalog);
+  const shippingCents = calculateShipping(baseSummary.subtotalCents);
+  const taxCents = calculateTax(baseSummary.subtotalCents);
+
+  return {
+    ...baseSummary,
+    shippingCents,
+    taxCents,
+    totalCents: baseSummary.subtotalCents + shippingCents + taxCents,
+  };
+}
+
+export function calculateCartSummary(
+  cartItems: CartItem[],
+  catalog: Product[],
+): CartSummary {
+  return calculateCartTotal(cartItems, catalog);
+}
+
+function hasValidEmailShape(email: string): boolean {
+  const atIndex = email.indexOf("@");
+  const hasSingleAt = atIndex !== -1 && atIndex === email.lastIndexOf("@");
+  const domain = hasSingleAt ? email.slice(atIndex + 1) : "";
+
+  return (
+    hasSingleAt && atIndex > 0 && domain.includes(".") && !domain.endsWith(".")
+  );
+}
+
+function normalizeCheckoutDetails(details: CheckoutDetails): CheckoutDetails {
+  return {
+    name: details.name.trim().toLowerCase(),
+    email: details.email.trim().toLowerCase(),
+    shippingAddress: details.shippingAddress.trim().toLowerCase(),
+  };
+}
+
+function getKnownCartLines(
+  cartItems: CartItem[],
+  catalog: Product[],
+): CartItem[] {
+  const catalogById = new Map(catalog.map((product) => [product.id, product]));
+
+  return cartItems
+    .filter((item) => catalogById.has(item.productId) && item.quantity > 0)
+    .map((item) => ({ ...item }))
+    .sort((first, second) => first.productId.localeCompare(second.productId));
+}
+
+function hashOrderInput(input: string): string {
+  let hash = 0;
+
+  for (const character of input) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+
+  return hash.toString(36).toUpperCase().padStart(7, "0");
+}
+
+export function validateCheckout(
+  details: CheckoutDetails,
+  cartItems: CartItem[],
+  catalog: Product[],
+): CheckoutValidationResult {
+  const normalizedDetails = normalizeCheckoutDetails(details);
+  const errors: CheckoutValidationResult["errors"] = {};
+
+  if (!normalizedDetails.name) {
+    errors.name = "Enter your name.";
+  }
+
+  if (!normalizedDetails.email) {
+    errors.email = "Enter your email.";
+  } else if (!hasValidEmailShape(normalizedDetails.email)) {
+    errors.email = "Enter a valid email address.";
+  }
+
+  if (!normalizedDetails.shippingAddress) {
+    errors.shippingAddress = "Enter a shipping address.";
+  }
+
+  if (calculateCartTotal(cartItems, catalog).itemCount === 0) {
+    errors.cart = "Add at least one catalog item to checkout.";
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
+
+export function createOrderConfirmationId(
+  details: CheckoutDetails,
+  cartItems: CartItem[],
+  catalog: Product[],
+): string {
+  const normalizedDetails = normalizeCheckoutDetails(details);
+  const cartLines = getKnownCartLines(cartItems, catalog)
+    .map((item) => `${item.productId}:${item.quantity}`)
+    .join("|");
+  const totalCents = calculateCartTotal(cartItems, catalog).totalCents;
+  const orderInput = [
+    normalizedDetails.name,
+    normalizedDetails.email,
+    normalizedDetails.shippingAddress,
+    cartLines,
+    totalCents.toString(),
+  ].join("|");
+
+  return `X15-${hashOrderInput(orderInput)}`;
 }
