@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  addCartItem,
+  calculateCartSubtotal,
   calculateCartSummary,
+  calculateCartTotal,
+  calculateShipping,
+  calculateTax,
+  createOrderConfirmationId,
   formatPrice,
   getVisibleProducts,
   products,
+  removeCartItem,
+  updateCartItemQuantity,
+  validateCheckout,
 } from "./storefront";
 
 describe("storefront helpers", () => {
@@ -15,6 +24,9 @@ describe("storefront helpers", () => {
     expect(calculateCartSummary([], products)).toEqual({
       itemCount: 0,
       subtotalCents: 0,
+      shippingCents: 0,
+      taxCents: 0,
+      totalCents: 0,
     });
   });
 
@@ -30,6 +42,9 @@ describe("storefront helpers", () => {
     ).toEqual({
       itemCount: 5,
       subtotalCents: 20400,
+      shippingCents: 500,
+      taxCents: 1632,
+      totalCents: 22532,
     });
   });
 
@@ -42,6 +57,9 @@ describe("storefront helpers", () => {
     ).toEqual({
       itemCount: 0,
       subtotalCents: 0,
+      shippingCents: 0,
+      taxCents: 0,
+      totalCents: 0,
     });
   });
 
@@ -111,5 +129,127 @@ describe("storefront helpers", () => {
     getVisibleProducts(products, { sort: "price-desc" });
 
     expect(products.map((product) => product.id)).toEqual(originalOrder);
+  });
+
+  it("adds new cart lines and increments existing items without mutating input", () => {
+    const cartItems = [{ productId: "desk-starter-kit", quantity: 1 }];
+
+    expect(addCartItem([], "travel-tumbler")).toEqual([
+      { productId: "travel-tumbler", quantity: 1 },
+    ]);
+    expect(addCartItem(cartItems, "desk-starter-kit")).toEqual([
+      { productId: "desk-starter-kit", quantity: 2 },
+    ]);
+    expect(cartItems).toEqual([{ productId: "desk-starter-kit", quantity: 1 }]);
+  });
+
+  it("removes only the matching cart line", () => {
+    expect(
+      removeCartItem(
+        [
+          { productId: "desk-starter-kit", quantity: 1 },
+          { productId: "travel-tumbler", quantity: 2 },
+        ],
+        "desk-starter-kit",
+      ),
+    ).toEqual([{ productId: "travel-tumbler", quantity: 2 }]);
+  });
+
+  it("updates quantities and removes non-positive quantities", () => {
+    const cartItems = [
+      { productId: "desk-starter-kit", quantity: 1 },
+      { productId: "travel-tumbler", quantity: 2 },
+    ];
+
+    expect(updateCartItemQuantity(cartItems, "travel-tumbler", 4)).toEqual([
+      { productId: "desk-starter-kit", quantity: 1 },
+      { productId: "travel-tumbler", quantity: 4 },
+    ]);
+    expect(updateCartItemQuantity(cartItems, "travel-tumbler", 0)).toEqual([
+      { productId: "desk-starter-kit", quantity: 1 },
+    ]);
+  });
+
+  it("calculates subtotal, shipping, tax, and total deterministically", () => {
+    const cartItems = [{ productId: "desk-starter-kit", quantity: 2 }];
+
+    expect(calculateCartSubtotal(cartItems, products)).toBe(10800);
+    expect(
+      calculateCartSubtotal([{ productId: "missing", quantity: 3 }], products),
+    ).toBe(0);
+    expect(calculateShipping(0)).toBe(0);
+    expect(calculateShipping(10800)).toBe(500);
+    expect(calculateTax(10800)).toBe(864);
+    expect(calculateCartTotal(cartItems, products)).toEqual({
+      itemCount: 2,
+      subtotalCents: 10800,
+      shippingCents: 500,
+      taxCents: 864,
+      totalCents: 12164,
+    });
+  });
+
+  it("validates checkout details and rejects an empty cart", () => {
+    expect(
+      validateCheckout(
+        { name: " ", email: "bad-email", shippingAddress: "" },
+        [],
+        products,
+      ),
+    ).toEqual({
+      isValid: false,
+      errors: {
+        name: "Enter your name.",
+        email: "Enter a valid email address.",
+        shippingAddress: "Enter a shipping address.",
+        cart: "Add at least one catalog item to checkout.",
+      },
+    });
+  });
+
+  it("accepts valid checkout details with a known cart item", () => {
+    expect(
+      validateCheckout(
+        {
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          shippingAddress: "12 Algorithm Way",
+        },
+        [{ productId: "desk-starter-kit", quantity: 1 }],
+        products,
+      ),
+    ).toEqual({
+      isValid: true,
+      errors: {},
+    });
+  });
+
+  it("creates deterministic order confirmation ids independent of cart order", () => {
+    const details = {
+      name: " Ada Lovelace ",
+      email: "ADA@example.com",
+      shippingAddress: " 12 Algorithm Way ",
+    };
+    const firstCart = [
+      { productId: "desk-starter-kit", quantity: 1 },
+      { productId: "travel-tumbler", quantity: 2 },
+    ];
+    const secondCart = [
+      { productId: "travel-tumbler", quantity: 2 },
+      { productId: "desk-starter-kit", quantity: 1 },
+    ];
+    const confirmationId = createOrderConfirmationId(
+      details,
+      firstCart,
+      products,
+    );
+
+    expect(confirmationId).toMatch(/^X15-[0-9A-Z]+$/);
+    expect(createOrderConfirmationId(details, firstCart, products)).toBe(
+      confirmationId,
+    );
+    expect(createOrderConfirmationId(details, secondCart, products)).toBe(
+      confirmationId,
+    );
   });
 });

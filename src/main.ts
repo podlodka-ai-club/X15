@@ -1,11 +1,18 @@
 import "./styles.css";
 import {
-  calculateCartSummary,
+  addCartItem,
+  calculateCartTotal,
+  createOrderConfirmationId,
   formatPrice,
   getVisibleProducts,
   products,
+  removeCartItem,
+  updateCartItemQuantity,
+  validateCheckout,
   type CatalogBrowseOptions,
   type CatalogSort,
+  type CartItem,
+  type CheckoutValidationResult,
   type Product,
   type ProductCategory,
 } from "./storefront";
@@ -28,7 +35,7 @@ function renderProductCard(product: Product): string {
       </div>
       <div class="product-card__footer">
         <strong>${formatPrice(product.priceCents)}</strong>
-        <button type="button" disabled>Add soon</button>
+        <button type="button" data-cart-add="${product.id}">Add to cart</button>
       </div>
     </article>
   `;
@@ -87,9 +94,69 @@ function renderCatalogResults(visibleProducts: Product[]): string {
   `;
 }
 
-export function renderStorefront(catalog: Product[] = products): string {
-  const cartSummary = calculateCartSummary([], catalog);
+type StorefrontRenderState = {
+  cartItems?: CartItem[];
+  checkoutErrors?: CheckoutValidationResult["errors"];
+  confirmationId?: string;
+};
+
+function renderCartLines(cartItems: CartItem[], catalog: Product[]): string {
+  const catalogById = new Map(catalog.map((product) => [product.id, product]));
+  const lines = cartItems
+    .map((item) => {
+      const product = catalogById.get(item.productId);
+
+      if (!product) {
+        return "";
+      }
+
+      return `
+        <li class="cart-line">
+          <div>
+            <strong>${product.name}</strong>
+            <span>${formatPrice(product.priceCents)} each</span>
+          </div>
+          <div class="cart-line__actions">
+            <button type="button" aria-label="Decrease ${product.name}" data-cart-decrement="${product.id}">-</button>
+            <input type="number" min="0" value="${item.quantity}" aria-label="${product.name} quantity" data-cart-quantity="${product.id}" />
+            <button type="button" aria-label="Increase ${product.name}" data-cart-increment="${product.id}">+</button>
+            <button type="button" data-cart-remove="${product.id}">Remove</button>
+          </div>
+          <strong>${formatPrice(product.priceCents * item.quantity)}</strong>
+        </li>
+      `;
+    })
+    .filter(Boolean)
+    .join("");
+
+  if (!lines) {
+    return `<p class="empty-cart">Your cart is empty.</p>`;
+  }
+
+  return `<ul class="cart-list">${lines}</ul>`;
+}
+
+function renderFieldError(error?: string): string {
+  return error ? `<p class="field__error">${error}</p>` : "";
+}
+
+export function renderStorefront(
+  catalog: Product[] = products,
+  state: StorefrontRenderState = {},
+): string {
+  const cartItems = state.cartItems ?? [];
+  const cartSummary = calculateCartTotal(cartItems, catalog);
   const visibleProducts = getVisibleProducts(catalog);
+  const cartLines = renderCartLines(cartItems, catalog);
+  const checkoutErrors = state.checkoutErrors ?? {};
+  const confirmationPanel = state.confirmationId
+    ? `
+        <aside class="confirmation-panel" aria-live="polite">
+          <span>Order confirmed</span>
+          <strong>${state.confirmationId}</strong>
+        </aside>
+      `
+    : "";
 
   return `
     <header class="site-header">
@@ -108,8 +175,8 @@ export function renderStorefront(catalog: Product[] = products): string {
         <p class="eyebrow">Minimal ecommerce foundation</p>
         <h1 id="intro-title">A small storefront shell for X15.</h1>
         <p>
-          Browse a starter catalog, review the cart placeholder, and keep checkout
-          ready for future product work.
+          Browse a starter catalog, update an in-memory cart, and confirm checkout
+          details without payments or accounts.
         </p>
       </section>
 
@@ -128,21 +195,59 @@ export function renderStorefront(catalog: Product[] = products): string {
         <div>
           <p class="eyebrow">Cart</p>
           <h2 id="cart-title">Cart summary</h2>
-          <p>Your cart is ready for future item selection work.</p>
+          ${cartLines}
+          ${renderFieldError(checkoutErrors.cart)}
         </div>
-        <aside class="summary-panel" aria-label="Cart summary placeholder">
-          <span>${cartSummary.itemCount} items</span>
-          <strong>${formatPrice(cartSummary.subtotalCents)}</strong>
+        <aside class="summary-panel" aria-label="Cart totals">
+          <dl class="totals-list">
+            <div>
+              <dt>Items</dt>
+              <dd>${cartSummary.itemCount}</dd>
+            </div>
+            <div>
+              <dt>Subtotal</dt>
+              <dd>${formatPrice(cartSummary.subtotalCents)}</dd>
+            </div>
+            <div>
+              <dt>Shipping</dt>
+              <dd>${formatPrice(cartSummary.shippingCents)}</dd>
+            </div>
+            <div>
+              <dt>Tax</dt>
+              <dd>${formatPrice(cartSummary.taxCents)}</dd>
+            </div>
+            <div class="totals-list__total">
+              <dt>Total</dt>
+              <dd>${formatPrice(cartSummary.totalCents)}</dd>
+            </div>
+          </dl>
         </aside>
       </section>
 
       <section id="checkout" class="store-section store-section--split" aria-labelledby="checkout-title">
         <div>
           <p class="eyebrow">Checkout</p>
-          <h2 id="checkout-title">Checkout placeholder</h2>
-          <p>Payment, shipping, accounts, and fulfillment are intentionally out of scope.</p>
+          <h2 id="checkout-title">Checkout details</h2>
+          <form class="checkout-form" data-checkout-form>
+            <label class="field">
+              <span>Name</span>
+              <input name="name" autocomplete="name" />
+              ${renderFieldError(checkoutErrors.name)}
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input name="email" autocomplete="email" />
+              ${renderFieldError(checkoutErrors.email)}
+            </label>
+            <label class="field">
+              <span>Shipping address</span>
+              <textarea name="shippingAddress" rows="3" autocomplete="shipping street-address"></textarea>
+              ${renderFieldError(checkoutErrors.shippingAddress)}
+            </label>
+            <button type="submit">Confirm order</button>
+          </form>
         </div>
-        <button type="button" disabled>Checkout coming soon</button>
+        ${confirmationPanel}
       </section>
     </main>
   `;
@@ -189,6 +294,100 @@ const app =
     : document.querySelector<HTMLDivElement>("#app");
 
 if (app) {
-  app.innerHTML = renderStorefront(products);
-  bindCatalogControls();
+  let cartItems: CartItem[] = [];
+  let checkoutErrors: CheckoutValidationResult["errors"] = {};
+  let confirmationId = "";
+
+  const render = () => {
+    app.innerHTML = renderStorefront(products, {
+      cartItems,
+      checkoutErrors,
+      confirmationId,
+    });
+    bindCatalogControls();
+  };
+
+  app.addEventListener("click", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const addProductId = target.dataset.cartAdd;
+    const removeProductId = target.dataset.cartRemove;
+    const incrementProductId = target.dataset.cartIncrement;
+    const decrementProductId = target.dataset.cartDecrement;
+
+    if (addProductId) {
+      cartItems = addCartItem(cartItems, addProductId);
+    } else if (removeProductId) {
+      cartItems = removeCartItem(cartItems, removeProductId);
+    } else if (incrementProductId) {
+      cartItems = addCartItem(cartItems, incrementProductId);
+    } else if (decrementProductId) {
+      const currentItem = cartItems.find(
+        (item) => item.productId === decrementProductId,
+      );
+
+      if (!currentItem) {
+        return;
+      }
+
+      cartItems = updateCartItemQuantity(
+        cartItems,
+        decrementProductId,
+        currentItem.quantity - 1,
+      );
+    } else {
+      return;
+    }
+
+    checkoutErrors = {};
+    confirmationId = "";
+    render();
+  });
+
+  app.addEventListener("change", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLInputElement) || !target.dataset.cartQuantity) {
+      return;
+    }
+
+    cartItems = updateCartItemQuantity(
+      cartItems,
+      target.dataset.cartQuantity,
+      Number.parseInt(target.value, 10) || 0,
+    );
+    checkoutErrors = {};
+    confirmationId = "";
+    render();
+  });
+
+  app.addEventListener("submit", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLFormElement) || !target.dataset.checkoutForm) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const formData = new FormData(target);
+    const details = {
+      name: String(formData.get("name") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      shippingAddress: String(formData.get("shippingAddress") ?? ""),
+    };
+    const validation = validateCheckout(details, cartItems, products);
+
+    checkoutErrors = validation.errors;
+    confirmationId = validation.isValid
+      ? createOrderConfirmationId(details, cartItems, products)
+      : "";
+    render();
+  });
+
+  render();
 }
