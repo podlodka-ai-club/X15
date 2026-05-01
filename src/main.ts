@@ -7,6 +7,20 @@ export type Product = {
   description: string;
 };
 
+export type PriceSort = "none" | "price-asc" | "price-desc";
+
+export type CatalogState = {
+  category: string;
+  search: string;
+  sort: PriceSort;
+};
+
+export const defaultCatalogState: CatalogState = {
+  category: "All",
+  search: "",
+  sort: "none",
+};
+
 export const products: Product[] = [
   {
     name: "Everyday Tote",
@@ -43,6 +57,86 @@ const formatPrice = (price: number): string =>
     maximumFractionDigits: 0,
   }).format(price);
 
+const escapeAttribute = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+const isPriceSort = (value: string): value is PriceSort =>
+  value === "none" || value === "price-asc" || value === "price-desc";
+
+export const getCatalogProducts = (
+  items: Product[],
+  state: CatalogState,
+): Product[] => {
+  const search = state.search.trim().toLowerCase();
+  const filteredProducts = items.filter((product) => {
+    const matchesCategory =
+      state.category === "All" || product.category === state.category;
+    const matchesSearch =
+      search.length === 0 ||
+      [product.name, product.category, product.description].some((value) =>
+        value.toLowerCase().includes(search),
+      );
+
+    return matchesCategory && matchesSearch;
+  });
+
+  if (state.sort === "price-asc") {
+    return [...filteredProducts].sort((a, b) => a.price - b.price);
+  }
+
+  if (state.sort === "price-desc") {
+    return [...filteredProducts].sort((a, b) => b.price - a.price);
+  }
+
+  return filteredProducts;
+};
+
+const createCatalogControls = (
+  state: CatalogState,
+  categories: string[],
+): string => `
+  <div class="catalog-controls" aria-label="Catalog controls">
+    <div class="catalog-field">
+      <label for="catalog-search">Search</label>
+      <input
+        id="catalog-search"
+        name="search"
+        type="search"
+        value="${escapeAttribute(state.search)}"
+        placeholder="Product or category"
+      />
+    </div>
+
+    <div class="catalog-field">
+      <label for="catalog-category">Category</label>
+      <select id="catalog-category" name="category">
+        ${categories
+          .map(
+            (category) => `
+              <option value="${escapeAttribute(category)}"${
+                category === state.category ? " selected" : ""
+              }>${category}</option>
+            `,
+          )
+          .join("")}
+      </select>
+    </div>
+
+    <div class="catalog-field">
+      <label for="catalog-sort">Price sort</label>
+      <select id="catalog-sort" name="sort">
+        <option value="none"${state.sort === "none" ? " selected" : ""}>Featured</option>
+        <option value="price-asc"${state.sort === "price-asc" ? " selected" : ""}>Low to high</option>
+        <option value="price-desc"${state.sort === "price-desc" ? " selected" : ""}>High to low</option>
+      </select>
+    </div>
+  </div>
+`;
+
 const createProductCards = (items: Product[]): string => {
   if (items.length === 0) {
     return '<p class="empty-products">Products will appear here soon.</p>';
@@ -64,7 +158,17 @@ const createProductCards = (items: Product[]): string => {
     .join("");
 };
 
-export const createStorefrontMarkup = (items: Product[] = products): string => `
+export const createStorefrontMarkup = (
+  items: Product[] = products,
+  state: CatalogState = defaultCatalogState,
+): string => {
+  const categories = [
+    "All",
+    ...Array.from(new Set(items.map((product) => product.category))),
+  ];
+  const catalogProducts = getCatalogProducts(items, state);
+
+  return `
   <header class="store-header">
     <div>
       <p class="eyebrow">X15 Store</p>
@@ -79,8 +183,9 @@ export const createStorefrontMarkup = (items: Product[] = products): string => `
         <p class="eyebrow">Catalog</p>
         <h2 id="products-heading">Featured products</h2>
       </div>
+      ${createCatalogControls(state, categories)}
       <div class="product-grid">
-        ${createProductCards(items)}
+        ${createProductCards(catalogProducts)}
       </div>
     </section>
 
@@ -99,12 +204,42 @@ export const createStorefrontMarkup = (items: Product[] = products): string => `
     </aside>
   </main>
 `;
+};
 
 export const renderStorefront = (
   root: HTMLElement,
   items: Product[] = products,
 ): void => {
-  root.innerHTML = createStorefrontMarkup(items);
+  let state: CatalogState = { ...defaultCatalogState };
+
+  const renderWithState = (): void => {
+    root.innerHTML = createStorefrontMarkup(items, state);
+
+    const searchInput = root.querySelector<HTMLInputElement>("#catalog-search");
+    const categorySelect =
+      root.querySelector<HTMLSelectElement>("#catalog-category");
+    const sortSelect = root.querySelector<HTMLSelectElement>("#catalog-sort");
+
+    searchInput?.addEventListener("input", () => {
+      state = { ...state, search: searchInput.value };
+      renderWithState();
+    });
+
+    categorySelect?.addEventListener("change", () => {
+      state = { ...state, category: categorySelect.value };
+      renderWithState();
+    });
+
+    sortSelect?.addEventListener("change", () => {
+      state = {
+        ...state,
+        sort: isPriceSort(sortSelect.value) ? sortSelect.value : "none",
+      };
+      renderWithState();
+    });
+  };
+
+  renderWithState();
 };
 
 if (typeof document !== "undefined") {
