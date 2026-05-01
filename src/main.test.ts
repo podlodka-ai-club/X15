@@ -86,7 +86,16 @@ describe("storefront helpers", () => {
     expect(markup).toContain("data-catalog-sort");
     expect(markup).toContain("data-catalog-count");
     expect(markup).toContain("Cart summary");
-    expect(markup).toContain("Checkout placeholder");
+    expect(markup).toContain("Shipping details");
+  });
+
+  it("includes cart totals and checkout form hooks", () => {
+    const markup = createStorefrontMarkup([sampleProduct]);
+
+    expect(markup).toContain("data-cart-lines");
+    expect(markup).toContain("data-cart-totals");
+    expect(markup).toContain("data-checkout-form");
+    expect(markup).toContain("data-checkout-message");
   });
 
   it("filters catalog products by exact category", () => {
