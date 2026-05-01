@@ -1,22 +1,32 @@
-# X15
+# X15 Storefront
 
-Repository for the X15 project by [Podlodka AI Club](https://github.com/podlodka-ai-club).
+A minimal TypeScript ecommerce skeleton for the X15 project by
+[Podlodka AI Club](https://github.com/podlodka-ai-club).
 
 ## Overview
 
-This repository is part of the Podlodka AI Club initiative. Project details, documentation, and usage instructions will be added as the project evolves.
+This app uses Vite, plain TypeScript, and static catalog data to render a small storefront
+foundation. It includes a header, featured product cards, a cart summary placeholder, and a
+checkout placeholder for later feature work.
 
 ## Getting Started
 
 ```bash
-git clone git@github.com:podlodka-ai-club/X15.git
-cd X15
+npm install
+npm run dev
 ```
 
-## Contributing
+## Validation
 
-Contributions are welcome. Please open an issue or submit a pull request.
+```bash
+npm run type-check
+npm run lint
+npm run format:check
+npm run test
+npm run build
+```
 
-## License
+## Scope
 
-To be determined.
+This skeleton does not include external services, authentication, payments, shipping, persistence,
+deployment configuration, or CI workflow changes.
