@@ -18,6 +18,14 @@ export type CartSummary = {
   subtotal: number;
 };
 
+export type PriceSort = "featured" | "price-asc" | "price-desc";
+
+export type CatalogOptions = {
+  category?: string;
+  searchTerm?: string;
+  priceSort?: PriceSort;
+};
+
 export const products: Product[] = [
   {
     id: "coffee-kit",
@@ -66,6 +74,36 @@ export const calculateCartSummary = (cartLines: CartLine[]): CartSummary =>
     { itemCount: 0, subtotal: 0 },
   );
 
+export const getCatalogProducts = (
+  catalog: Product[],
+  options: CatalogOptions = {},
+): Product[] => {
+  const category = options.category?.trim() ?? "";
+  const searchTerm = options.searchTerm?.trim().toLocaleLowerCase() ?? "";
+
+  const matches = catalog.filter((product) => {
+    const matchesCategory =
+      category.length === 0 || product.category.trim() === category;
+    const matchesSearch =
+      searchTerm.length === 0 ||
+      [product.name, product.description, product.category].some((value) =>
+        value.toLocaleLowerCase().includes(searchTerm),
+      );
+
+    return matchesCategory && matchesSearch;
+  });
+
+  if (options.priceSort === "price-asc") {
+    return [...matches].sort((first, second) => first.price - second.price);
+  }
+
+  if (options.priceSort === "price-desc") {
+    return [...matches].sort((first, second) => second.price - first.price);
+  }
+
+  return [...matches];
+};
+
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
@@ -74,11 +112,21 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
-export const createStorefrontMarkup = (
-  catalog: Product[] = products,
-  cartSummary: CartSummary = { itemCount: 0, subtotal: 0 },
-): string => {
-  const productCards = catalog
+const getCatalogCategories = (catalog: Product[]): string[] => [
+  ...new Set(catalog.map((product) => product.category)),
+];
+
+const renderProductCards = (catalog: Product[]): string => {
+  if (catalog.length === 0) {
+    return `
+      <div class="catalog-empty">
+        <h3>No products found</h3>
+        <p>Try another search term, category, or sort option.</p>
+      </div>
+    `;
+  }
+
+  return catalog
     .map(
       (product) => `
         <article class="product-card">
@@ -95,6 +143,25 @@ export const createStorefrontMarkup = (
       `,
     )
     .join("");
+};
+
+const renderCatalogStatus = (
+  visibleCount: number,
+  totalCount: number,
+): string => `${visibleCount} of ${totalCount} products shown`;
+
+export const createStorefrontMarkup = (
+  catalog: Product[] = products,
+  cartSummary: CartSummary = { itemCount: 0, subtotal: 0 },
+): string => {
+  const categoryOptions = getCatalogCategories(catalog)
+    .map(
+      (category) => `
+        <option value="${escapeHtml(category)}">${escapeHtml(category)}</option>
+      `,
+    )
+    .join("");
+  const productCards = renderProductCards(catalog);
 
   return `
     <header class="store-header">
@@ -118,7 +185,36 @@ export const createStorefrontMarkup = (
           <p class="eyebrow">Catalog</p>
           <h2 id="products-title">Featured products</h2>
         </div>
-        <div class="product-grid">
+        <div class="catalog-controls" aria-label="Catalog filters">
+          <label>
+            <span>Search</span>
+            <input
+              type="search"
+              name="catalog-search"
+              placeholder="Search products"
+              data-catalog-search
+            />
+          </label>
+          <label>
+            <span>Category</span>
+            <select name="catalog-category" data-catalog-category>
+              <option value="">All categories</option>
+              ${categoryOptions}
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select name="catalog-sort" data-catalog-sort>
+              <option value="featured">Featured</option>
+              <option value="price-asc">Price: low to high</option>
+              <option value="price-desc">Price: high to low</option>
+            </select>
+          </label>
+        </div>
+        <p class="catalog-status" data-catalog-count aria-live="polite">
+          ${renderCatalogStatus(catalog.length, catalog.length)}
+        </p>
+        <div class="product-grid" data-product-grid>
           ${productCards}
         </div>
       </section>
@@ -163,11 +259,71 @@ const updateCartSummary = (cartLines: CartLine[]): void => {
 
 const mountStorefront = (root: HTMLElement): void => {
   const cartLines: CartLine[] = [];
+  const browseOptions: CatalogOptions = { priceSort: "featured" };
 
   root.innerHTML = createStorefrontMarkup(
     products,
     calculateCartSummary(cartLines),
   );
+
+  const renderCatalog = (): void => {
+    const visibleProducts = getCatalogProducts(products, browseOptions);
+    const gridElement = root.querySelector<HTMLElement>("[data-product-grid]");
+    const countElement = root.querySelector<HTMLElement>(
+      "[data-catalog-count]",
+    );
+
+    if (gridElement) {
+      gridElement.innerHTML = renderProductCards(visibleProducts);
+    }
+
+    if (countElement) {
+      countElement.textContent = renderCatalogStatus(
+        visibleProducts.length,
+        products.length,
+      );
+    }
+  };
+
+  root.addEventListener("input", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const input = target.closest("[data-catalog-search]");
+
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    browseOptions.searchTerm = input.value;
+    renderCatalog();
+  });
+
+  root.addEventListener("change", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const categorySelect = target.closest("[data-catalog-category]");
+
+    if (categorySelect instanceof HTMLSelectElement) {
+      browseOptions.category = categorySelect.value;
+      renderCatalog();
+      return;
+    }
+
+    const sortSelect = target.closest("[data-catalog-sort]");
+
+    if (sortSelect instanceof HTMLSelectElement) {
+      browseOptions.priceSort = sortSelect.value as PriceSort;
+      renderCatalog();
+    }
+  });
 
   root.addEventListener("click", (event) => {
     const target = event.target;

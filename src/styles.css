@@ -105,6 +105,48 @@ button:hover {
   gap: 0.25rem;
 }
 
+.catalog-controls {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(12rem, 1fr) minmax(10rem, 14rem) minmax(
+      10rem,
+      14rem
+    );
+}
+
+.catalog-controls label {
+  color: #526057;
+  display: grid;
+  font-size: 0.85rem;
+  font-weight: 800;
+  gap: 0.35rem;
+}
+
+.catalog-controls input,
+.catalog-controls select {
+  background: #ffffff;
+  border: 1px solid #ddd8cc;
+  border-radius: 6px;
+  color: #17211a;
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.catalog-controls input:focus,
+.catalog-controls select:focus {
+  border-color: #215c44;
+  outline: 3px solid rgb(33 92 68 / 18%);
+}
+
+.catalog-status {
+  color: #526057;
+  font-weight: 700;
+  margin: 0;
+}
+
 .eyebrow {
   color: #a14836;
   font-size: 0.78rem;
@@ -159,6 +201,28 @@ button:hover {
   font-size: 1.1rem;
 }
 
+.catalog-empty {
+  background: #ffffff;
+  border: 1px solid #ddd8cc;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+  min-height: 10rem;
+  padding: 1rem;
+  place-content: center;
+  text-align: center;
+}
+
+.catalog-empty h3,
+.catalog-empty p {
+  margin: 0;
+}
+
+.catalog-empty p {
+  color: #526057;
+}
+
 .cart-panel,
 .checkout-panel {
   display: grid;
@@ -195,6 +259,10 @@ button:hover {
   }
 
   .store-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-controls {
     grid-template-columns: 1fr;
   }
 }
