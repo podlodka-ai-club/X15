@@ -26,15 +26,33 @@ describe("createStorefrontMarkup", () => {
     }
   });
 
-  it("renders cart and checkout placeholders", () => {
+  it("renders cart and checkout panels", () => {
     const markup = createStorefrontMarkup();
 
     expect(markup).toContain("Cart summary");
     expect(markup).toContain("Your cart is empty.");
-    expect(markup).toContain("Checkout placeholder");
-    expect(markup).toContain(
-      "Payment and order submission are intentionally out of scope",
-    );
+    expect(markup).toContain("Checkout");
+    expect(markup).toContain("Full name");
+    expect(markup).toContain("Email");
+    expect(markup).toContain("Shipping address");
+  });
+
+  it("renders a prefilled cart summary", () => {
+    const markup = createStorefrontMarkup(products, {
+      cart: [{ name: "Everyday Tote", price: 48, quantity: 2 }],
+      checkout: {
+        name: "",
+        email: "",
+        shippingAddress: "",
+      },
+    });
+
+    expect(markup).toContain("Cart: 2 items");
+    expect(markup).toContain("Everyday Tote");
+    expect(markup).toContain("Subtotal");
+    expect(markup).toContain("Shipping");
+    expect(markup).toContain("Tax");
+    expect(markup).toContain("Total");
   });
 
   it("renders an empty product state", () => {
