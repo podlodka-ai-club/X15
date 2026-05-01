@@ -123,6 +123,53 @@ main {
   margin: 0.25rem 0 0;
 }
 
+.catalog-toolbar {
+  background: #ffffff;
+  border: 1px solid #ded8cf;
+  border-radius: 8px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.catalog-toolbar__field {
+  color: #1d252c;
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 700;
+}
+
+.catalog-toolbar__field span {
+  font-size: 0.88rem;
+}
+
+.catalog-toolbar__field input,
+.catalog-toolbar__field select {
+  background: #ffffff;
+  border: 1px solid #ded8cf;
+  border-radius: 6px;
+  color: #1d252c;
+  font: inherit;
+  min-width: 0;
+  padding: 0.7rem 0.75rem;
+}
+
+.catalog-results__summary {
+  color: #4d5963;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+
+.catalog-empty {
+  background: #ffffff;
+  border: 1px solid #ded8cf;
+  border-radius: 8px;
+  color: #4d5963;
+  padding: 1rem;
+}
+
 .product-grid {
   display: grid;
   gap: 1rem;

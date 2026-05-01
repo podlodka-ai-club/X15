@@ -2,9 +2,19 @@ import "./styles.css";
 import {
   calculateCartSummary,
   formatPrice,
+  getVisibleProducts,
   products,
+  type CatalogBrowseOptions,
+  type CatalogSort,
   type Product,
+  type ProductCategory,
 } from "./storefront";
+
+const categoryLabels: Record<ProductCategory, string> = {
+  workspace: "Workspace",
+  drinkware: "Drinkware",
+  bags: "Bags",
+};
 
 function renderProductCard(product: Product): string {
   return `
@@ -24,9 +34,62 @@ function renderProductCard(product: Product): string {
   `;
 }
 
+function getCatalogCategories(catalog: Product[]): ProductCategory[] {
+  return Array.from(new Set(catalog.map((product) => product.category)));
+}
+
+function renderCatalogControls(catalog: Product[]): string {
+  const categoryOptions = getCatalogCategories(catalog)
+    .map(
+      (category) =>
+        `<option value="${category}">${categoryLabels[category]}</option>`,
+    )
+    .join("");
+
+  return `
+    <div class="catalog-toolbar" aria-label="Catalog browsing controls">
+      <label class="catalog-toolbar__field">
+        <span>Search products</span>
+        <input id="catalog-search" type="search" name="catalog-search" placeholder="Search by name or detail" />
+      </label>
+      <label class="catalog-toolbar__field">
+        <span>Category</span>
+        <select id="catalog-category" name="catalog-category">
+          <option value="all">All categories</option>
+          ${categoryOptions}
+        </select>
+      </label>
+      <label class="catalog-toolbar__field">
+        <span>Sort by</span>
+        <select id="catalog-sort" name="catalog-sort">
+          <option value="featured">Featured</option>
+          <option value="price-asc">Price: low to high</option>
+          <option value="price-desc">Price: high to low</option>
+        </select>
+      </label>
+    </div>
+  `;
+}
+
+function renderCatalogResults(visibleProducts: Product[]): string {
+  const productLabel = visibleProducts.length === 1 ? "product" : "products";
+  const productCards = visibleProducts.map(renderProductCard).join("");
+
+  return `
+    <p class="catalog-results__summary" aria-live="polite">
+      ${visibleProducts.length} ${productLabel}
+    </p>
+    ${
+      visibleProducts.length === 0
+        ? `<p class="catalog-empty">No products match your search.</p>`
+        : `<div class="product-grid">${productCards}</div>`
+    }
+  `;
+}
+
 export function renderStorefront(catalog: Product[] = products): string {
   const cartSummary = calculateCartSummary([], catalog);
-  const productCards = catalog.map(renderProductCard).join("");
+  const visibleProducts = getVisibleProducts(catalog);
 
   return `
     <header class="site-header">
@@ -55,8 +118,9 @@ export function renderStorefront(catalog: Product[] = products): string {
           <p class="eyebrow">Catalog</p>
           <h2 id="products-title">Featured products</h2>
         </div>
-        <div class="product-grid">
-          ${productCards}
+        ${renderCatalogControls(catalog)}
+        <div id="catalog-results" class="catalog-results">
+          ${renderCatalogResults(visibleProducts)}
         </div>
       </section>
 
@@ -84,6 +148,41 @@ export function renderStorefront(catalog: Product[] = products): string {
   `;
 }
 
+function readCatalogOptions(): CatalogBrowseOptions {
+  const search = document.querySelector<HTMLInputElement>("#catalog-search");
+  const category =
+    document.querySelector<HTMLSelectElement>("#catalog-category");
+  const sort = document.querySelector<HTMLSelectElement>("#catalog-sort");
+
+  return {
+    category: category?.value as CatalogBrowseOptions["category"],
+    query: search?.value,
+    sort: sort?.value as CatalogSort,
+  };
+}
+
+function bindCatalogControls(): void {
+  const search = document.querySelector<HTMLInputElement>("#catalog-search");
+  const category =
+    document.querySelector<HTMLSelectElement>("#catalog-category");
+  const sort = document.querySelector<HTMLSelectElement>("#catalog-sort");
+  const results = document.querySelector<HTMLDivElement>("#catalog-results");
+
+  if (!search || !category || !sort || !results) {
+    return;
+  }
+
+  const updateResults = () => {
+    results.innerHTML = renderCatalogResults(
+      getVisibleProducts(products, readCatalogOptions()),
+    );
+  };
+
+  search.addEventListener("input", updateResults);
+  category.addEventListener("change", updateResults);
+  sort.addEventListener("change", updateResults);
+}
+
 const app =
   typeof document === "undefined"
     ? null
@@ -91,4 +190,5 @@ const app =
 
 if (app) {
   app.innerHTML = renderStorefront(products);
+  bindCatalogControls();
 }
