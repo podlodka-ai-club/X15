@@ -1,5 +1,19 @@
 import "./styles.css";
 
+import {
+  addCartLine,
+  calculateCartTotals,
+  removeCartLine,
+  updateCartLineQuantity,
+  type CartLine,
+  type CartTotals,
+} from "./cart";
+import {
+  createOrderConfirmationId,
+  validateCheckout,
+  type CheckoutDetails,
+} from "./checkout";
+
 export type Product = {
   id: string;
   name: string;
@@ -8,10 +22,7 @@ export type Product = {
   category: string;
 };
 
-export type CartLine = {
-  product: Product;
-  quantity: number;
-};
+export type { CartLine, CartTotals };
 
 export type CartSummary = {
   itemCount: number;
@@ -65,14 +76,14 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 export const formatPrice = (price: number): string =>
   currencyFormatter.format(price);
 
-export const calculateCartSummary = (cartLines: CartLine[]): CartSummary =>
-  cartLines.reduce<CartSummary>(
-    (summary, line) => ({
-      itemCount: summary.itemCount + line.quantity,
-      subtotal: summary.subtotal + line.product.price * line.quantity,
-    }),
-    { itemCount: 0, subtotal: 0 },
-  );
+export const calculateCartSummary = (cartLines: CartLine[]): CartSummary => {
+  const totals = calculateCartTotals(cartLines);
+
+  return {
+    itemCount: totals.itemCount,
+    subtotal: totals.subtotal,
+  };
+};
 
 export const getCatalogProducts = (
   catalog: Product[],
@@ -150,10 +161,78 @@ const renderCatalogStatus = (
   totalCount: number,
 ): string => `${visibleCount} of ${totalCount} products shown`;
 
+const createCartLinesMarkup = (cartLines: CartLine[]): string => {
+  if (cartLines.length === 0) {
+    return `<p class="muted">Your cart is empty.</p>`;
+  }
+
+  return `
+    <ul class="cart-lines">
+      ${cartLines
+        .map(
+          (line) => `
+            <li class="cart-line">
+              <div>
+                <strong>${escapeHtml(line.product.name)}</strong>
+                <span>${formatPrice(line.product.price)} each</span>
+              </div>
+              <label>
+                <span class="visually-hidden">Quantity for ${escapeHtml(line.product.name)}</span>
+                <input
+                  min="0"
+                  type="number"
+                  value="${line.quantity}"
+                  data-cart-action="quantity"
+                  data-product-id="${escapeHtml(line.product.id)}"
+                />
+              </label>
+              <button
+                class="button-secondary"
+                type="button"
+                data-cart-action="remove"
+                data-product-id="${escapeHtml(line.product.id)}"
+              >
+                Remove
+              </button>
+            </li>
+          `,
+        )
+        .join("")}
+    </ul>
+  `;
+};
+
+const createCartTotalsMarkup = (cartTotals: CartTotals): string => `
+  <dl class="cart-totals">
+    <div>
+      <dt>Subtotal</dt>
+      <dd>${formatPrice(cartTotals.subtotal)}</dd>
+    </div>
+    <div>
+      <dt>Shipping</dt>
+      <dd>${formatPrice(cartTotals.shipping)}</dd>
+    </div>
+    <div>
+      <dt>Tax</dt>
+      <dd>${formatPrice(cartTotals.tax)}</dd>
+    </div>
+    <div class="cart-totals__total">
+      <dt>Total</dt>
+      <dd>${formatPrice(cartTotals.total)}</dd>
+    </div>
+  </dl>
+`;
+
+const createCheckoutMessageMarkup = (message = ""): string =>
+  message
+    ? `<p class="checkout-message" data-checkout-message>${escapeHtml(message)}</p>`
+    : `<p class="checkout-message" data-checkout-message></p>`;
+
 export const createStorefrontMarkup = (
   catalog: Product[] = products,
-  cartSummary: CartSummary = { itemCount: 0, subtotal: 0 },
+  cartLines: CartLine[] = [],
 ): string => {
+  const cartTotals = calculateCartTotals(cartLines);
   const categoryOptions = getCatalogCategories(catalog)
     .map(
       (category) => `
@@ -175,7 +254,7 @@ export const createStorefrontMarkup = (
         <a href="#checkout">Checkout</a>
       </nav>
       <p class="cart-count" aria-live="polite">
-        <span data-cart-count>${cartSummary.itemCount}</span> items
+        <span data-cart-count>${cartTotals.itemCount}</span> items
       </p>
     </header>
 
@@ -223,48 +302,107 @@ export const createStorefrontMarkup = (
         <p class="eyebrow">Cart</p>
         <h2 id="cart-title">Cart summary</h2>
         <p data-cart-summary>
-          ${cartSummary.itemCount} items selected, ${formatPrice(cartSummary.subtotal)} subtotal
+          ${cartTotals.itemCount} items selected, ${formatPrice(cartTotals.subtotal)} subtotal
         </p>
-        <p class="muted">Cart persistence and line-item editing will be added later.</p>
+        <div data-cart-lines>
+          ${createCartLinesMarkup(cartLines)}
+        </div>
+        <div data-cart-totals>
+          ${createCartTotalsMarkup(cartTotals)}
+        </div>
       </aside>
 
       <section class="checkout-panel" id="checkout" aria-labelledby="checkout-title">
         <p class="eyebrow">Checkout</p>
-        <h2 id="checkout-title">Checkout placeholder</h2>
-        <p>
-          Shipping, payment, and order review steps will appear here in a future iteration.
-        </p>
+        <h2 id="checkout-title">Shipping details</h2>
+        <form class="checkout-form" data-checkout-form>
+          <label>
+            Name
+            <input autocomplete="name" name="name" type="text" />
+            <span class="field-error" data-checkout-error="name"></span>
+          </label>
+          <label>
+            Email
+            <input autocomplete="email" name="email" type="email" />
+            <span class="field-error" data-checkout-error="email"></span>
+          </label>
+          <label>
+            Shipping address
+            <textarea autocomplete="shipping street-address" name="shippingAddress" rows="3"></textarea>
+            <span class="field-error" data-checkout-error="shippingAddress"></span>
+          </label>
+          <button type="submit" data-checkout-submit disabled>Place order</button>
+        </form>
+        ${createCheckoutMessageMarkup()}
       </section>
     </main>
   `;
 };
 
-const updateCartSummary = (cartLines: CartLine[]): void => {
-  const summary = calculateCartSummary(cartLines);
-  const countElement = document.querySelector<HTMLElement>("[data-cart-count]");
-  const summaryElement = document.querySelector<HTMLElement>(
+const updateCheckoutErrors = (
+  root: HTMLElement,
+  errors: Partial<Record<keyof CheckoutDetails, string>> = {},
+): void => {
+  root
+    .querySelectorAll<HTMLElement>("[data-checkout-error]")
+    .forEach((item) => {
+      const field = item.dataset.checkoutError as keyof CheckoutDetails;
+
+      item.textContent = errors[field] ?? "";
+    });
+};
+
+const updateCartView = (
+  root: HTMLElement,
+  cartLines: CartLine[],
+  message = "",
+): void => {
+  const totals = calculateCartTotals(cartLines);
+  const countElement = root.querySelector<HTMLElement>("[data-cart-count]");
+  const summaryElement = root.querySelector<HTMLElement>(
     "[data-cart-summary]",
+  );
+  const linesElement = root.querySelector<HTMLElement>("[data-cart-lines]");
+  const totalsElement = root.querySelector<HTMLElement>("[data-cart-totals]");
+  const submitButton = root.querySelector<HTMLButtonElement>(
+    "[data-checkout-submit]",
+  );
+  const messageElement = root.querySelector<HTMLElement>(
+    "[data-checkout-message]",
   );
 
   if (countElement) {
-    countElement.textContent = String(summary.itemCount);
+    countElement.textContent = String(totals.itemCount);
   }
 
   if (summaryElement) {
-    summaryElement.textContent = `${summary.itemCount} items selected, ${formatPrice(
-      summary.subtotal,
+    summaryElement.textContent = `${totals.itemCount} items selected, ${formatPrice(
+      totals.subtotal,
     )} subtotal`;
+  }
+
+  if (linesElement) {
+    linesElement.innerHTML = createCartLinesMarkup(cartLines);
+  }
+
+  if (totalsElement) {
+    totalsElement.innerHTML = createCartTotalsMarkup(totals);
+  }
+
+  if (submitButton) {
+    submitButton.disabled = cartLines.length === 0;
+  }
+
+  if (messageElement) {
+    messageElement.textContent = message;
   }
 };
 
 const mountStorefront = (root: HTMLElement): void => {
-  const cartLines: CartLine[] = [];
+  let cartLines: CartLine[] = [];
   const browseOptions: CatalogOptions = { priceSort: "featured" };
 
-  root.innerHTML = createStorefrontMarkup(
-    products,
-    calculateCartSummary(cartLines),
-  );
+  root.innerHTML = createStorefrontMarkup(products, cartLines);
 
   const renderCatalog = (): void => {
     const visibleProducts = getCatalogProducts(products, browseOptions);
@@ -292,14 +430,29 @@ const mountStorefront = (root: HTMLElement): void => {
       return;
     }
 
-    const input = target.closest("[data-catalog-search]");
+    const searchInput = target.closest("[data-catalog-search]");
 
-    if (!(input instanceof HTMLInputElement)) {
+    if (searchInput instanceof HTMLInputElement) {
+      browseOptions.searchTerm = searchInput.value;
+      renderCatalog();
       return;
     }
 
-    browseOptions.searchTerm = input.value;
-    renderCatalog();
+    const quantityInput = target.closest<HTMLInputElement>(
+      '[data-cart-action="quantity"]',
+    );
+
+    if (!quantityInput) {
+      return;
+    }
+
+    cartLines = updateCartLineQuantity(
+      cartLines,
+      quantityInput.dataset.productId ?? "",
+      Number(quantityInput.value),
+    );
+    updateCheckoutErrors(root);
+    updateCartView(root, cartLines);
   });
 
   root.addEventListener("change", (event) => {
@@ -332,7 +485,23 @@ const mountStorefront = (root: HTMLElement): void => {
       return;
     }
 
-    const button = target.closest<HTMLButtonElement>("[data-product-id]");
+    const removeButton = target.closest<HTMLButtonElement>(
+      '[data-cart-action="remove"]',
+    );
+
+    if (removeButton) {
+      cartLines = removeCartLine(
+        cartLines,
+        removeButton.dataset.productId ?? "",
+      );
+      updateCheckoutErrors(root);
+      updateCartView(root, cartLines);
+      return;
+    }
+
+    const button = target.closest<HTMLButtonElement>(
+      "button[data-product-id]:not([data-cart-action])",
+    );
 
     if (!button) {
       return;
@@ -346,15 +515,46 @@ const mountStorefront = (root: HTMLElement): void => {
       return;
     }
 
-    const cartLine = cartLines.find((line) => line.product.id === product.id);
+    cartLines = addCartLine(cartLines, product);
+    updateCheckoutErrors(root);
+    updateCartView(root, cartLines);
+  });
 
-    if (cartLine) {
-      cartLine.quantity += 1;
-    } else {
-      cartLines.push({ product, quantity: 1 });
+  root.addEventListener("submit", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLFormElement)) {
+      return;
     }
 
-    updateCartSummary(cartLines);
+    if (!target.matches("[data-checkout-form]")) {
+      return;
+    }
+
+    event.preventDefault();
+    updateCheckoutErrors(root);
+
+    if (cartLines.length === 0) {
+      updateCartView(root, cartLines, "Add at least one item before checkout.");
+      return;
+    }
+
+    const formData = new FormData(target);
+    const details: CheckoutDetails = {
+      name: String(formData.get("name") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      shippingAddress: String(formData.get("shippingAddress") ?? ""),
+    };
+    const result = validateCheckout(details);
+
+    if (!result.valid) {
+      updateCheckoutErrors(root, result.errors);
+      updateCartView(root, cartLines, "Review the highlighted fields.");
+      return;
+    }
+
+    const confirmationId = createOrderConfirmationId(result.details, cartLines);
+    updateCartView(root, cartLines, `Order confirmed: ${confirmationId}`);
   });
 };
 

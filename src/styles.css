@@ -43,6 +43,21 @@ button:hover {
   background: #174332;
 }
 
+button:disabled {
+  background: #8a958c;
+  cursor: not-allowed;
+}
+
+.button-secondary {
+  background: #eef2ef;
+  color: #215c44;
+  padding: 0.55rem 0.75rem;
+}
+
+.button-secondary:hover {
+  background: #dce6df;
+}
+
 .store-header {
   align-items: center;
   background: #ffffff;
@@ -234,6 +249,71 @@ button:hover {
   align-self: start;
 }
 
+.cart-lines {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cart-line {
+  align-items: center;
+  border-top: 1px solid #eee8dc;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) 4.5rem auto;
+  padding-top: 0.75rem;
+}
+
+.cart-line div,
+.checkout-form label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.cart-line span {
+  color: #647066;
+  font-size: 0.9rem;
+}
+
+.cart-line input,
+.checkout-form input,
+.checkout-form textarea {
+  border: 1px solid #cfc8ba;
+  border-radius: 6px;
+  color: #17211a;
+  font: inherit;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.cart-totals {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.cart-totals div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.cart-totals dt {
+  color: #526057;
+}
+
+.cart-totals dd {
+  font-weight: 800;
+  margin: 0;
+}
+
+.cart-totals__total {
+  border-top: 1px solid #ddd8cc;
+  padding-top: 0.5rem;
+}
+
 .checkout-panel {
   background: #213447;
   color: #ffffff;
@@ -244,8 +324,41 @@ button:hover {
   color: #f0c95c;
 }
 
+.checkout-form {
+  display: grid;
+  gap: 0.85rem;
+  max-width: 36rem;
+}
+
+.checkout-form label {
+  font-weight: 800;
+}
+
+.field-error,
+.checkout-message {
+  color: #ffd36d;
+  font-weight: 700;
+  min-height: 1.5rem;
+}
+
+.checkout-message {
+  margin: 0;
+}
+
 .muted {
   color: #647066;
+}
+
+.visually-hidden {
+  clip: rect(0 0 0 0);
+  border: 0;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 @media (max-width: 760px) {
@@ -262,7 +375,8 @@ button:hover {
     grid-template-columns: 1fr;
   }
 
-  .catalog-controls {
+  .catalog-controls,
+  .cart-line {
     grid-template-columns: 1fr;
   }
 }
