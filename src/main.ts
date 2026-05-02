@@ -1,5 +1,20 @@
 import './styles.css';
 
+import {
+  addCartItem,
+  getCartTotals,
+  removeCartItem,
+  updateCartItemQuantity,
+  type CartItem,
+} from './cart';
+import {
+  createOrderConfirmation,
+  validateCheckout,
+  type CheckoutConfirmation,
+  type CheckoutErrors,
+  type CheckoutValues,
+} from './checkout';
+
 type Product = {
   id: string;
   name: string;
@@ -78,6 +93,14 @@ export const applyCatalogFilters = (items: Product[], filters: CatalogFilters): 
   return [...filteredItems];
 };
 
+const formatMoney = (price: number): string =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(price);
+
 const createElement = <TagName extends keyof HTMLElementTagNameMap>(
   tagName: TagName,
   className?: string,
@@ -96,7 +119,10 @@ const createElement = <TagName extends keyof HTMLElementTagNameMap>(
   return element;
 };
 
-const createProductCard = (product: Product): HTMLElement => {
+const createProductCard = (
+  product: Product,
+  onAddToCart: (product: Product) => void,
+): HTMLElement => {
   const card = createElement('article', 'product-card');
   card.dataset.productId = product.id;
 
@@ -105,10 +131,11 @@ const createProductCard = (product: Product): HTMLElement => {
   const description = createElement('p', 'product-card__description', product.description);
   const footer = createElement('div', 'product-card__footer');
   const price = createElement('strong', 'product-card__price', formatPrice(product.price));
-  const button = createElement('button', 'product-card__button', 'Preview');
+  const button = createElement('button', 'product-card__button', 'Add to cart');
 
   button.type = 'button';
-  button.setAttribute('aria-label', `Preview ${product.name}`);
+  button.setAttribute('aria-label', `Add ${product.name} to cart`);
+  button.addEventListener('click', () => onAddToCart(product));
   footer.append(price, button);
   card.append(category, title, description, footer);
 
@@ -123,6 +150,15 @@ export const renderStorefront = (root: HTMLElement): void => {
     category: 'all',
     sort: 'featured',
   };
+
+  let cartItems: CartItem[] = [];
+  let checkoutValues: CheckoutValues = {
+    name: '',
+    email: '',
+    shippingAddress: '',
+  };
+  let checkoutErrors: CheckoutErrors = {};
+  let confirmation: CheckoutConfirmation | null = null;
 
   const app = createElement('main', 'storefront');
 
@@ -197,7 +233,9 @@ export const renderStorefront = (root: HTMLElement): void => {
       return;
     }
 
-    visibleProducts.forEach((product) => productGrid.append(createProductCard(product)));
+    visibleProducts.forEach((product) =>
+      productGrid.append(createProductCard(product, handleAddToCart)),
+    );
   };
 
   searchInput.addEventListener('input', () => {
@@ -213,7 +251,6 @@ export const renderStorefront = (root: HTMLElement): void => {
     renderProducts();
   });
 
-  renderProducts();
   catalog.append(catalogTitle, controls, productGrid);
 
   const checkoutArea = createElement('section', 'storefront-panels');
@@ -221,29 +258,192 @@ export const renderStorefront = (root: HTMLElement): void => {
 
   const cartSummary = createElement('article', 'cart-summary');
   const cartTitle = createElement('h2', 'section-title', 'Cart summary');
-  const cartText = createElement(
-    'p',
-    'panel-copy',
-    'Selected products will appear here when cart interactions are added.',
-  );
-  const cartMeta = createElement('p', 'cart-summary__meta', '0 items | $0 total');
-  cartSummary.append(cartTitle, cartText, cartMeta);
 
   const checkoutPlaceholder = createElement('article', 'checkout-placeholder');
   const checkoutTitle = createElement('h2', 'section-title', 'Checkout');
-  const checkoutText = createElement(
-    'p',
-    'panel-copy',
-    'Checkout details, payment, and fulfillment will be introduced in a future iteration.',
-  );
-  const checkoutButton = createElement(
-    'button',
-    'checkout-placeholder__button',
-    'Checkout unavailable',
-  );
-  checkoutButton.type = 'button';
-  checkoutButton.disabled = true;
-  checkoutPlaceholder.append(checkoutTitle, checkoutText, checkoutButton);
+
+  const renderCartSummary = (): void => {
+    const totals = getCartTotals(cartItems);
+    const itemLabel = totals.itemCount === 1 ? '1 item' : `${totals.itemCount} items`;
+    const cartMeta = createElement(
+      'p',
+      'cart-summary__meta',
+      `${itemLabel} | ${formatMoney(totals.total)} total`,
+    );
+
+    if (cartItems.length === 0) {
+      const emptyText = createElement('p', 'panel-copy', 'Your cart is empty.');
+      cartSummary.replaceChildren(cartTitle, emptyText, cartMeta);
+      return;
+    }
+
+    const itemsList = createElement('div', 'cart-summary__items');
+
+    cartItems.forEach((item) => {
+      const row = createElement('div', 'cart-summary__row');
+      row.dataset.productId = item.product.id;
+
+      const details = createElement('div', 'cart-summary__details');
+      const name = createElement('strong', 'cart-summary__name', item.product.name);
+      const price = createElement(
+        'span',
+        'cart-summary__line-price',
+        `${formatPrice(item.product.price)} each`,
+      );
+      details.append(name, price);
+
+      const controls = createElement('div', 'cart-summary__quantity');
+      const quantityLabel = createElement('label', 'cart-summary__quantity-label', 'Qty');
+      const quantityInput = createElement('input', 'cart-summary__quantity-input');
+      quantityInput.type = 'number';
+      quantityInput.min = '0';
+      quantityInput.step = '1';
+      quantityInput.value = String(item.quantity);
+      quantityInput.setAttribute('aria-label', `Quantity for ${item.product.name}`);
+      quantityInput.addEventListener('change', () => {
+        cartItems = updateCartItemQuantity(cartItems, item.product.id, Number(quantityInput.value));
+        confirmation = null;
+        checkoutErrors = validateCheckout(checkoutValues, cartItems);
+        renderCartSummary();
+        renderCheckout();
+      });
+
+      const removeButton = createElement('button', 'cart-summary__remove', 'Remove');
+      removeButton.type = 'button';
+      removeButton.addEventListener('click', () => {
+        cartItems = removeCartItem(cartItems, item.product.id);
+        confirmation = null;
+        checkoutErrors = validateCheckout(checkoutValues, cartItems);
+        renderCartSummary();
+        renderCheckout();
+      });
+
+      controls.append(quantityLabel, quantityInput, removeButton);
+      row.append(details, controls);
+      itemsList.append(row);
+    });
+
+    const totalsList = createElement('dl', 'cart-summary__totals');
+    [
+      ['Subtotal', formatMoney(totals.subtotal)],
+      ['Shipping', totals.shipping === 0 ? 'Free' : formatMoney(totals.shipping)],
+      ['Tax', formatMoney(totals.tax)],
+      ['Total', formatMoney(totals.total)],
+    ].forEach(([label, value]) => {
+      const term = createElement('dt', undefined, label);
+      const description = createElement('dd', undefined, value);
+      totalsList.append(term, description);
+    });
+
+    cartSummary.replaceChildren(cartTitle, itemsList, totalsList, cartMeta);
+  };
+
+  const renderCheckout = (): void => {
+    const form = createElement('form', 'checkout-form');
+    const cartError = checkoutErrors.cart
+      ? createElement('p', 'checkout-form__error', checkoutErrors.cart)
+      : null;
+
+    const createCheckoutField = (
+      id: keyof CheckoutValues,
+      labelText: string,
+      control: HTMLInputElement | HTMLTextAreaElement,
+    ): HTMLElement => {
+      const field = createElement('label', 'checkout-form__field');
+      const label = createElement('span', 'checkout-form__label', labelText);
+      const error = checkoutErrors[id]
+        ? createElement('span', 'checkout-form__error', checkoutErrors[id])
+        : null;
+
+      control.className = 'checkout-form__input';
+      control.name = id;
+      control.value = checkoutValues[id];
+      control.setAttribute('aria-label', labelText);
+      control.addEventListener('input', () => {
+        checkoutValues = {
+          ...checkoutValues,
+          [id]: control.value,
+        };
+        confirmation = null;
+      });
+
+      field.append(label, control);
+
+      if (error) {
+        field.append(error);
+      }
+
+      return field;
+    };
+
+    const nameInput = createCheckoutField('name', 'Name', createElement('input'));
+    const emailInput = createCheckoutField('email', 'Email', createElement('input'));
+    const addressInput = createCheckoutField(
+      'shippingAddress',
+      'Shipping address',
+      createElement('textarea'),
+    );
+    const submitButton = createElement(
+      'button',
+      'checkout-placeholder__button checkout-placeholder__button--primary',
+      cartItems.length === 0 ? 'Checkout unavailable' : 'Place order',
+    );
+    submitButton.type = 'submit';
+    submitButton.disabled = cartItems.length === 0;
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      checkoutErrors = validateCheckout(checkoutValues, cartItems);
+
+      if (Object.keys(checkoutErrors).length > 0) {
+        confirmation = null;
+      } else {
+        confirmation = createOrderConfirmation(checkoutValues, cartItems);
+      }
+
+      renderCheckout();
+    });
+
+    form.append(nameInput, emailInput, addressInput);
+
+    if (cartError) {
+      form.append(cartError);
+    }
+
+    form.append(submitButton);
+
+    if (confirmation) {
+      const confirmationPanel = createElement('div', 'checkout-confirmation');
+      const confirmationTitle = createElement(
+        'h3',
+        'checkout-confirmation__title',
+        'Order confirmed',
+      );
+      const confirmationText = createElement(
+        'p',
+        'checkout-confirmation__text',
+        `${confirmation.orderId} for ${confirmation.customerName} | ${formatMoney(
+          confirmation.total,
+        )}`,
+      );
+      confirmationPanel.append(confirmationTitle, confirmationText);
+      form.append(confirmationPanel);
+    }
+
+    checkoutPlaceholder.replaceChildren(checkoutTitle, form);
+  };
+
+  const handleAddToCart = (product: Product): void => {
+    cartItems = addCartItem(cartItems, product);
+    confirmation = null;
+    checkoutErrors = validateCheckout(checkoutValues, cartItems);
+    renderCartSummary();
+    renderCheckout();
+  };
+
+  renderProducts();
+  renderCartSummary();
+  renderCheckout();
 
   checkoutArea.append(cartSummary, checkoutPlaceholder);
   app.append(header, catalog, checkoutArea);
