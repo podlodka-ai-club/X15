@@ -8,6 +8,14 @@ type Product = {
   category: string;
 };
 
+export type PriceSort = 'featured' | 'price-asc' | 'price-desc';
+
+export type CatalogFilters = {
+  searchTerm: string;
+  category: string;
+  sort: PriceSort;
+};
+
 const products: Product[] = [
   {
     id: 'workflow-kit',
@@ -45,6 +53,30 @@ const formatPrice = (price: number): string =>
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(price);
+
+export const applyCatalogFilters = (items: Product[], filters: CatalogFilters): Product[] => {
+  const normalizedSearch = filters.searchTerm.trim().toLowerCase();
+  const filteredItems = items.filter((product) => {
+    const matchesCategory = filters.category === 'all' || product.category === filters.category;
+    const matchesSearch =
+      normalizedSearch.length === 0 ||
+      product.name.toLowerCase().includes(normalizedSearch) ||
+      product.description.toLowerCase().includes(normalizedSearch) ||
+      product.category.toLowerCase().includes(normalizedSearch);
+
+    return matchesCategory && matchesSearch;
+  });
+
+  if (filters.sort === 'price-asc') {
+    return [...filteredItems].sort((first, second) => first.price - second.price);
+  }
+
+  if (filters.sort === 'price-desc') {
+    return [...filteredItems].sort((first, second) => second.price - first.price);
+  }
+
+  return [...filteredItems];
+};
 
 const createElement = <TagName extends keyof HTMLElementTagNameMap>(
   tagName: TagName,
@@ -86,6 +118,12 @@ const createProductCard = (product: Product): HTMLElement => {
 export const renderStorefront = (root: HTMLElement): void => {
   root.textContent = '';
 
+  const currentFilters: CatalogFilters = {
+    searchTerm: '',
+    category: 'all',
+    sort: 'featured',
+  };
+
   const app = createElement('main', 'storefront');
 
   const header = createElement('header', 'storefront-header');
@@ -102,9 +140,81 @@ export const renderStorefront = (root: HTMLElement): void => {
   catalog.setAttribute('aria-labelledby', 'catalog-title');
   const catalogTitle = createElement('h2', 'section-title', 'Featured products');
   catalogTitle.id = 'catalog-title';
+
+  const controls = createElement('div', 'catalog__controls');
+
+  const searchField = createElement('label', 'catalog__field');
+  const searchLabel = createElement('span', 'catalog__label', 'Search');
+  const searchInput = createElement('input', 'catalog__input');
+  searchInput.type = 'search';
+  searchInput.placeholder = 'Search products';
+  searchInput.setAttribute('aria-label', 'Search products');
+  searchField.append(searchLabel, searchInput);
+
+  const categoryField = createElement('label', 'catalog__field');
+  const categoryLabel = createElement('span', 'catalog__label', 'Category');
+  const categorySelect = createElement('select', 'catalog__select');
+  categorySelect.setAttribute('aria-label', 'Filter by category');
+
+  const allCategoriesOption = createElement('option', undefined, 'All categories');
+  allCategoriesOption.value = 'all';
+  categorySelect.append(allCategoriesOption);
+  [...new Set(products.map((product) => product.category))].forEach((category) => {
+    const option = createElement('option', undefined, category);
+    option.value = category;
+    categorySelect.append(option);
+  });
+  categoryField.append(categoryLabel, categorySelect);
+
+  const sortField = createElement('label', 'catalog__field');
+  const sortLabel = createElement('span', 'catalog__label', 'Sort');
+  const sortSelect = createElement('select', 'catalog__select');
+  sortSelect.setAttribute('aria-label', 'Sort products');
+
+  [
+    { value: 'featured', label: 'Featured' },
+    { value: 'price-asc', label: 'Price: low to high' },
+    { value: 'price-desc', label: 'Price: high to low' },
+  ].forEach((sortOption) => {
+    const option = createElement('option', undefined, sortOption.label);
+    option.value = sortOption.value;
+    sortSelect.append(option);
+  });
+  sortField.append(sortLabel, sortSelect);
+  controls.append(searchField, categoryField, sortField);
+
   const productGrid = createElement('div', 'product-grid');
-  products.forEach((product) => productGrid.append(createProductCard(product)));
-  catalog.append(catalogTitle, productGrid);
+
+  const renderProducts = (): void => {
+    productGrid.textContent = '';
+
+    const visibleProducts = applyCatalogFilters(products, currentFilters);
+
+    if (visibleProducts.length === 0) {
+      productGrid.append(
+        createElement('p', 'catalog__empty', 'No products match the current filters.'),
+      );
+      return;
+    }
+
+    visibleProducts.forEach((product) => productGrid.append(createProductCard(product)));
+  };
+
+  searchInput.addEventListener('input', () => {
+    currentFilters.searchTerm = searchInput.value;
+    renderProducts();
+  });
+  categorySelect.addEventListener('change', () => {
+    currentFilters.category = categorySelect.value;
+    renderProducts();
+  });
+  sortSelect.addEventListener('change', () => {
+    currentFilters.sort = sortSelect.value as PriceSort;
+    renderProducts();
+  });
+
+  renderProducts();
+  catalog.append(catalogTitle, controls, productGrid);
 
   const checkoutArea = createElement('section', 'storefront-panels');
   checkoutArea.setAttribute('aria-label', 'Cart and checkout');
