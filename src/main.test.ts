@@ -21,9 +21,15 @@ const getRequiredElement = <ElementType extends Element>(selector: string): Elem
   return element;
 };
 
+const navigateTo = (route: string): void => {
+  window.location.hash = route;
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
+};
+
 describe('renderStorefront', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    window.location.hash = '';
   });
 
   it('filters products by category', async () => {
@@ -160,6 +166,36 @@ describe('renderStorefront', () => {
     expect(document.querySelectorAll<HTMLSelectElement>('.catalog__select')).toHaveLength(2);
   });
 
+  it('renders catalog, cart, and checkout as dedicated hash-routed pages', async () => {
+    await importStorefront();
+
+    expect(document.querySelector('.storefront-nav')).not.toBeNull();
+    expect(document.querySelector('.catalog')).not.toBeNull();
+    expect(document.querySelector('.cart-summary')).toBeNull();
+    expect(document.querySelector('.checkout-placeholder')).toBeNull();
+    expect(
+      getRequiredElement<HTMLAnchorElement>('.storefront-nav__link[aria-current="page"]').href,
+    ).toContain('#/catalog');
+
+    navigateTo('#/cart');
+
+    expect(document.querySelector('.catalog')).toBeNull();
+    expect(document.querySelector('.cart-summary')).not.toBeNull();
+    expect(document.querySelector('.checkout-placeholder')).toBeNull();
+    expect(
+      getRequiredElement<HTMLAnchorElement>('.storefront-nav__link[aria-current="page"]').href,
+    ).toContain('#/cart');
+
+    navigateTo('#/checkout');
+
+    expect(document.querySelector('.catalog')).toBeNull();
+    expect(document.querySelector('.cart-summary')).toBeNull();
+    expect(document.querySelector('.checkout-placeholder')).not.toBeNull();
+    expect(
+      getRequiredElement<HTMLAnchorElement>('.storefront-nav__link[aria-current="page"]').href,
+    ).toContain('#/checkout');
+  });
+
   it('updates product cards from the search input', async () => {
     await importStorefront();
 
@@ -215,8 +251,14 @@ describe('renderStorefront', () => {
   it('renders empty cart and unavailable checkout states', async () => {
     await importStorefront();
 
+    navigateTo('#/cart');
+
     expect(document.querySelector('.cart-summary')?.textContent).toContain('Your cart is empty.');
     expect(document.querySelector('.cart-summary')?.textContent).toContain('0 items | $0.00 total');
+    expect(document.querySelector('.checkout-placeholder')).toBeNull();
+
+    navigateTo('#/checkout');
+
     expect(document.querySelector('.checkout-placeholder')?.textContent).toContain('Checkout');
     expect(document.querySelector('.checkout-placeholder__button')?.textContent).toBe(
       'Checkout unavailable',
@@ -234,17 +276,23 @@ describe('renderStorefront', () => {
     );
 
     addButton.click();
+    navigateTo('#/cart');
 
     expect(document.querySelector('.cart-summary')?.textContent).toContain('AI Workflow Kit');
     expect(document.querySelector('.cart-summary')?.textContent).toContain('Subtotal$49.00');
     expect(document.querySelector('.cart-summary')?.textContent).toContain('Shipping$12.00');
     expect(document.querySelector('.cart-summary')?.textContent).toContain('Tax$3.92');
     expect(document.querySelector('.cart-summary')?.textContent).toContain('Total$64.92');
+
+    navigateTo('#/checkout');
+
     expect(getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').disabled).toBe(
       false,
     );
 
+    navigateTo('#/catalog');
     addButton.click();
+    navigateTo('#/cart');
 
     expect(document.querySelectorAll('.cart-summary__row')).toHaveLength(1);
     expect(getRequiredElement<HTMLInputElement>('.cart-summary__quantity-input').value).toBe('2');
@@ -259,6 +307,7 @@ describe('renderStorefront', () => {
     getRequiredElement<HTMLButtonElement>(
       '.product-card[data-product-id="workflow-kit"] .product-card__button',
     ).click();
+    navigateTo('#/cart');
 
     const quantityInput = getRequiredElement<HTMLInputElement>('.cart-summary__quantity-input');
     quantityInput.value = '3';
@@ -271,6 +320,9 @@ describe('renderStorefront', () => {
     getRequiredElement<HTMLButtonElement>('.cart-summary__remove').click();
 
     expect(document.querySelector('.cart-summary')?.textContent).toContain('Your cart is empty.');
+
+    navigateTo('#/checkout');
+
     expect(getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').disabled).toBe(
       true,
     );
@@ -282,6 +334,7 @@ describe('renderStorefront', () => {
     getRequiredElement<HTMLButtonElement>(
       '.product-card[data-product-id="workflow-kit"] .product-card__button',
     ).click();
+    navigateTo('#/checkout');
 
     getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').click();
 
@@ -302,6 +355,7 @@ describe('renderStorefront', () => {
     getRequiredElement<HTMLButtonElement>(
       '.product-card[data-product-id="workflow-kit"] .product-card__button',
     ).click();
+    navigateTo('#/checkout');
 
     const nameInput = getRequiredElement<HTMLInputElement>('input[name="name"]');
     const emailInput = getRequiredElement<HTMLInputElement>('input[name="email"]');
