@@ -24,7 +24,9 @@ body {
 }
 
 button,
-a {
+a,
+input,
+textarea {
   font: inherit;
 }
 
@@ -33,7 +35,9 @@ a {
 }
 
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 3px;
 }
@@ -198,6 +202,132 @@ a:focus-visible {
 .cart-panel p,
 .checkout-panel p {
   margin: 0.5rem 0 0;
+}
+
+.cart-lines {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.cart-line {
+  border: 1px solid #d8ded2;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.cart-line h3 {
+  font-size: 1rem;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.cart-line p {
+  color: #5d6b5f;
+  margin: 0.15rem 0 0;
+}
+
+.cart-line__controls {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cart-line__controls label,
+.checkout-form label {
+  color: #3f4c42;
+  display: grid;
+  font-size: 0.86rem;
+  font-weight: 800;
+  gap: 0.35rem;
+}
+
+.cart-line__controls input {
+  max-width: 4.75rem;
+}
+
+.cart-line__controls button,
+.checkout-form button {
+  background: #2f5c45;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 2.35rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.cart-line__controls button:hover,
+.checkout-form button:hover {
+  background: #244936;
+}
+
+.cart-totals {
+  border-top: 1px solid #d8ded2;
+  display: grid;
+  gap: 0.45rem;
+  margin: 1rem 0 0;
+  padding-top: 1rem;
+}
+
+.cart-totals div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.cart-totals dt,
+.cart-totals dd {
+  margin: 0;
+}
+
+.cart-totals dd {
+  font-weight: 800;
+}
+
+.cart-totals__total {
+  border-top: 1px solid #d8ded2;
+  font-size: 1.08rem;
+  margin-top: 0.25rem;
+  padding-top: 0.55rem;
+}
+
+.checkout-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.checkout-form input,
+.checkout-form textarea,
+.cart-line__controls input {
+  border: 1px solid #a9b5a6;
+  border-radius: 6px;
+  color: #18201b;
+  padding: 0.55rem 0.65rem;
+}
+
+.checkout-form textarea {
+  resize: vertical;
+}
+
+.field-error {
+  color: #b42318;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.checkout-confirmation {
+  background: #edf7ef;
+  border: 1px solid #94c79c;
+  border-radius: 8px;
+  color: #244936;
+  font-weight: 800;
+  padding: 0.75rem;
 }
 
 .muted,

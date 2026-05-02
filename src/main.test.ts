@@ -31,18 +31,31 @@ describe("storefront helpers", () => {
   });
 
   it("returns zero values for an empty cart", () => {
-    expect(calculateCartSummary([])).toEqual({
+    expect(calculateCartSummary([], sampleProducts)).toEqual({
       itemCount: 0,
       subtotal: 0,
+      shipping: 0,
+      tax: 0,
+      total: 0,
     });
   });
 
   it("totals selected product ids and ignores unknown ids", () => {
     expect(
-      calculateCartSummary(["sample", "missing", "special"], sampleProducts),
+      calculateCartSummary(
+        [
+          { productId: "sample", quantity: 1 },
+          { productId: "missing", quantity: 3 },
+          { productId: "special", quantity: 1 },
+        ],
+        sampleProducts,
+      ),
     ).toEqual({
-      itemCount: 2,
+      itemCount: 5,
       subtotal: 20.5,
+      shipping: 7.5,
+      tax: 1.64,
+      total: 29.64,
     });
   });
 
@@ -52,7 +65,7 @@ describe("storefront helpers", () => {
     expect(markup).toContain("X15 Storefront");
     expect(markup).toContain("product-grid");
     expect(markup).toContain("Cart summary");
-    expect(markup).toContain("Checkout placeholder");
+    expect(markup).toContain("Shipping details");
   });
 
   it("renders every product card name", () => {
@@ -63,17 +76,20 @@ describe("storefront helpers", () => {
     }
   });
 
-  it("includes cart summary and checkout placeholders", () => {
-    const markup = createStorefrontMarkup(sampleProducts, {
-      itemCount: 2,
-      subtotal: 20.5,
-    });
+  it("includes cart totals and checkout controls", () => {
+    const markup = createStorefrontMarkup(
+      sampleProducts,
+      calculateCartSummary(
+        [{ productId: "sample", quantity: 2 }],
+        sampleProducts,
+      ),
+      [{ productId: "sample", quantity: 2 }],
+    );
 
     expect(markup).toContain("data-cart-summary");
-    expect(markup).toContain("2 items selected, $20.50 subtotal");
-    expect(markup).toContain(
-      "Shipping, payment, and order review steps will appear here",
-    );
+    expect(markup).toContain("<dd>$25.00</dd>");
+    expect(markup).toContain('data-cart-quantity-id="sample"');
+    expect(markup).toContain("data-checkout-form");
   });
 
   it("renders a stable empty catalog state", () => {
