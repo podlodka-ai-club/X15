@@ -66,8 +66,33 @@ button {
   font-size: 1.05rem;
 }
 
+.storefront-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.storefront-nav__link {
+  min-height: 40px;
+  border: 1px solid #d9d2c4;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #1f5f68;
+  padding: 8px 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.storefront-nav__link:hover,
+.storefront-nav__link--active {
+  border-color: #1f5f68;
+  background: #e8f1f0;
+  color: #174a51;
+}
+
 .catalog,
-.storefront-panels {
+.storefront-page {
   padding-top: 32px;
 }
 
@@ -204,12 +229,6 @@ button {
 .cart-summary__remove:hover,
 .checkout-placeholder__button--primary:hover {
   background: #174a51;
-}
-
-.storefront-panels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
 }
 
 .cart-summary,
@@ -363,10 +382,6 @@ button {
 
   .storefront-header {
     padding-top: 20px;
-  }
-
-  .storefront-panels {
-    grid-template-columns: 1fr;
   }
 
   .catalog__controls {

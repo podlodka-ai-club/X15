@@ -31,6 +31,10 @@ export type CatalogFilters = {
   sort: PriceSort;
 };
 
+type StorefrontView = 'catalog' | 'cart' | 'checkout';
+
+const storefrontViews: StorefrontView[] = ['catalog', 'cart', 'checkout'];
+
 const products: Product[] = [
   {
     id: 'workflow-kit',
@@ -142,6 +146,16 @@ const createProductCard = (
   return card;
 };
 
+const getStorefrontViewFromHash = (hash: string): StorefrontView => {
+  const route = hash.replace(/^#\/?/, '');
+
+  if (storefrontViews.includes(route as StorefrontView)) {
+    return route as StorefrontView;
+  }
+
+  return 'catalog';
+};
+
 export const renderStorefront = (root: HTMLElement): void => {
   root.textContent = '';
 
@@ -159,6 +173,7 @@ export const renderStorefront = (root: HTMLElement): void => {
   };
   let checkoutErrors: CheckoutErrors = {};
   let confirmation: CheckoutConfirmation | null = null;
+  let activeView = getStorefrontViewFromHash(window.location.hash);
 
   const app = createElement('main', 'storefront');
 
@@ -170,7 +185,20 @@ export const renderStorefront = (root: HTMLElement): void => {
     'storefront-header__summary',
     'A compact ecommerce shell for browsing AI product starter packages.',
   );
-  header.append(eyebrow, title, summary);
+  const navigation = createElement('nav', 'storefront-nav');
+  navigation.setAttribute('aria-label', 'Storefront pages');
+  const navLinks = storefrontViews.map((view) => {
+    const link = createElement(
+      'a',
+      'storefront-nav__link',
+      view.charAt(0).toUpperCase() + view.slice(1),
+    );
+    link.href = `#/${view}`;
+    link.dataset.view = view;
+    return link;
+  });
+  navigation.append(...navLinks);
+  header.append(eyebrow, title, summary, navigation);
 
   const catalog = createElement('section', 'catalog');
   catalog.setAttribute('aria-labelledby', 'catalog-title');
@@ -253,14 +281,13 @@ export const renderStorefront = (root: HTMLElement): void => {
 
   catalog.append(catalogTitle, controls, productGrid);
 
-  const checkoutArea = createElement('section', 'storefront-panels');
-  checkoutArea.setAttribute('aria-label', 'Cart and checkout');
-
   const cartSummary = createElement('article', 'cart-summary');
   const cartTitle = createElement('h2', 'section-title', 'Cart summary');
 
   const checkoutPlaceholder = createElement('article', 'checkout-placeholder');
   const checkoutTitle = createElement('h2', 'section-title', 'Checkout');
+  const activePage = createElement('section', 'storefront-page');
+  activePage.setAttribute('aria-live', 'polite');
 
   const renderCartSummary = (): void => {
     const totals = getCartTotals(cartItems);
@@ -441,12 +468,41 @@ export const renderStorefront = (root: HTMLElement): void => {
     renderCheckout();
   };
 
+  const renderActivePage = (): void => {
+    activeView = getStorefrontViewFromHash(window.location.hash);
+
+    navLinks.forEach((link) => {
+      const isActive = link.dataset.view === activeView;
+      link.classList.toggle('storefront-nav__link--active', isActive);
+
+      if (isActive) {
+        link.setAttribute('aria-current', 'page');
+      } else {
+        link.removeAttribute('aria-current');
+      }
+    });
+
+    if (activeView === 'cart') {
+      activePage.replaceChildren(cartSummary);
+      return;
+    }
+
+    if (activeView === 'checkout') {
+      activePage.replaceChildren(checkoutPlaceholder);
+      return;
+    }
+
+    activePage.replaceChildren(catalog);
+  };
+
   renderProducts();
   renderCartSummary();
   renderCheckout();
+  renderActivePage();
 
-  checkoutArea.append(cartSummary, checkoutPlaceholder);
-  app.append(header, catalog, checkoutArea);
+  window.addEventListener('hashchange', renderActivePage);
+
+  app.append(header, activePage);
   root.append(app);
 };
 
