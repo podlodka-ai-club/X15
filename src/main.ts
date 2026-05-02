@@ -1,16 +1,26 @@
 import "./styles.css";
 
+import {
+  addCartItem,
+  calculateCartSummary as calculateCartSummaryForCart,
+  removeCartItem,
+  updateCartItemQuantity,
+  type CartLine,
+  type CartSummary,
+} from "./cart";
+import {
+  createOrderConfirmationId,
+  validateCheckout,
+  type CheckoutDetails,
+  type CheckoutErrors,
+} from "./checkout";
+
 export type Product = {
   id: string;
   name: string;
   description: string;
   price: number;
   category: string;
-};
-
-export type CartSummary = {
-  itemCount: number;
-  subtotal: number;
 };
 
 export const products: Product[] = [
@@ -52,25 +62,8 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 export const formatPrice = (price: number): string =>
   currencyFormatter.format(price);
 
-export const calculateCartSummary = (
-  selectedProductIds: string[],
-  catalog: Product[] = products,
-): CartSummary =>
-  selectedProductIds.reduce<CartSummary>(
-    (summary, productId) => {
-      const product = catalog.find((item) => item.id === productId);
-
-      if (!product) {
-        return summary;
-      }
-
-      return {
-        itemCount: summary.itemCount + 1,
-        subtotal: summary.subtotal + product.price,
-      };
-    },
-    { itemCount: 0, subtotal: 0 },
-  );
+export { calculateCartSummaryForCart as calculateCartSummary };
+export type { CartLine, CartSummary } from "./cart";
 
 const escapeHtml = (value: string): string =>
   value
@@ -106,9 +99,178 @@ const createProductCards = (catalog: Product[]): string => {
     .join("");
 };
 
+type CheckoutState = {
+  details: CheckoutDetails;
+  errors: CheckoutErrors;
+  cartError: string;
+  confirmationId: string;
+};
+
+const emptyCheckoutDetails: CheckoutDetails = {
+  name: "",
+  email: "",
+  shippingAddress: "",
+};
+
+const createEmptyCheckoutState = (): CheckoutState => ({
+  details: { ...emptyCheckoutDetails },
+  errors: {},
+  cartError: "",
+  confirmationId: "",
+});
+
+const createCartLinesMarkup = (
+  catalog: Product[],
+  cart: CartLine[],
+): string => {
+  if (cart.length === 0) {
+    return `<p class="muted" data-cart-empty>Your cart is empty.</p>`;
+  }
+
+  return `
+    <div class="cart-lines">
+      ${cart
+        .map((line) => {
+          const product = catalog.find((item) => item.id === line.productId);
+
+          if (!product) {
+            return "";
+          }
+
+          return `
+            <article class="cart-line" data-cart-line>
+              <div>
+                <h3>${escapeHtml(product.name)}</h3>
+                <p>${formatPrice(product.price)} each</p>
+              </div>
+              <div class="cart-line__controls">
+                <label>
+                  Qty
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="${line.quantity}"
+                    data-cart-quantity-id="${escapeHtml(line.productId)}"
+                    aria-label="${escapeHtml(product.name)} quantity"
+                  />
+                </label>
+                <button type="button" data-cart-decrement-id="${escapeHtml(line.productId)}">
+                  -
+                </button>
+                <button type="button" data-cart-increment-id="${escapeHtml(line.productId)}">
+                  +
+                </button>
+                <button type="button" data-cart-remove-id="${escapeHtml(line.productId)}">
+                  Remove
+                </button>
+              </div>
+              <strong>${formatPrice(product.price * line.quantity)}</strong>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+};
+
+const createCartTotalsMarkup = (cartSummary: CartSummary): string => `
+  <dl class="cart-totals" data-cart-summary>
+    <div>
+      <dt>Items</dt>
+      <dd>${cartSummary.itemCount}</dd>
+    </div>
+    <div>
+      <dt>Subtotal</dt>
+      <dd>${formatPrice(cartSummary.subtotal)}</dd>
+    </div>
+    <div>
+      <dt>Shipping</dt>
+      <dd>${formatPrice(cartSummary.shipping)}</dd>
+    </div>
+    <div>
+      <dt>Tax</dt>
+      <dd>${formatPrice(cartSummary.tax)}</dd>
+    </div>
+    <div class="cart-totals__total">
+      <dt>Total</dt>
+      <dd>${formatPrice(cartSummary.total)}</dd>
+    </div>
+  </dl>
+`;
+
+const createCheckoutErrorMarkup = (
+  id: string,
+  error: string | undefined,
+): string =>
+  error
+    ? `<p class="field-error" id="${id}" role="alert">${escapeHtml(error)}</p>`
+    : "";
+
+const createCheckoutMarkup = (checkoutState: CheckoutState): string => {
+  const nameErrorId = "checkout-name-error";
+  const emailErrorId = "checkout-email-error";
+  const addressErrorId = "checkout-address-error";
+
+  return `
+    ${
+      checkoutState.confirmationId
+        ? `<p class="checkout-confirmation" data-checkout-confirmation>
+            Order confirmed: ${escapeHtml(checkoutState.confirmationId)}
+          </p>`
+        : ""
+    }
+    ${
+      checkoutState.cartError
+        ? `<p class="field-error" role="alert">${escapeHtml(checkoutState.cartError)}</p>`
+        : ""
+    }
+    <form class="checkout-form" data-checkout-form>
+      <label>
+        Name
+        <input
+          type="text"
+          name="name"
+          value="${escapeHtml(checkoutState.details.name)}"
+          data-checkout-name
+          ${checkoutState.errors.name ? `aria-describedby="${nameErrorId}"` : ""}
+        />
+      </label>
+      ${createCheckoutErrorMarkup(nameErrorId, checkoutState.errors.name)}
+      <label>
+        Email
+        <input
+          type="email"
+          name="email"
+          value="${escapeHtml(checkoutState.details.email)}"
+          data-checkout-email
+          ${checkoutState.errors.email ? `aria-describedby="${emailErrorId}"` : ""}
+        />
+      </label>
+      ${createCheckoutErrorMarkup(emailErrorId, checkoutState.errors.email)}
+      <label>
+        Shipping address
+        <textarea
+          name="shippingAddress"
+          rows="3"
+          data-checkout-address
+          ${checkoutState.errors.shippingAddress ? `aria-describedby="${addressErrorId}"` : ""}
+        >${escapeHtml(checkoutState.details.shippingAddress)}</textarea>
+      </label>
+      ${createCheckoutErrorMarkup(
+        addressErrorId,
+        checkoutState.errors.shippingAddress,
+      )}
+      <button type="submit">Confirm order</button>
+    </form>
+  `;
+};
+
 export const createStorefrontMarkup = (
   catalog: Product[] = products,
-  cartSummary: CartSummary = { itemCount: 0, subtotal: 0 },
+  cartSummary: CartSummary = calculateCartSummaryForCart([], catalog),
+  cart: CartLine[] = [],
+  checkoutState: CheckoutState = createEmptyCheckoutState(),
 ): string => `
   <header class="store-header">
     <div>
@@ -139,47 +301,32 @@ export const createStorefrontMarkup = (
     <aside class="cart-panel" id="cart" aria-labelledby="cart-title">
       <p class="eyebrow">Cart</p>
       <h2 id="cart-title">Cart summary</h2>
-      <p data-cart-summary>
-        ${cartSummary.itemCount} items selected, ${formatPrice(cartSummary.subtotal)} subtotal
-      </p>
-      <p class="muted">Cart persistence and line-item editing will be added later.</p>
+      ${createCartLinesMarkup(catalog, cart)}
+      ${createCartTotalsMarkup(cartSummary)}
     </aside>
 
     <section class="checkout-panel" id="checkout" aria-labelledby="checkout-title">
       <p class="eyebrow">Checkout</p>
-      <h2 id="checkout-title">Checkout placeholder</h2>
-      <p>
-        Shipping, payment, and order review steps will appear here in a future iteration.
-      </p>
+      <h2 id="checkout-title">Shipping details</h2>
+      ${createCheckoutMarkup(checkoutState)}
     </section>
   </main>
 `;
 
-const updateCartSummary = (selectedProductIds: string[]): void => {
-  const summary = calculateCartSummary(selectedProductIds);
-  const countElement = document.querySelector<HTMLElement>("[data-cart-count]");
-  const summaryElement = document.querySelector<HTMLElement>(
-    "[data-cart-summary]",
-  );
-
-  if (countElement) {
-    countElement.textContent = String(summary.itemCount);
-  }
-
-  if (summaryElement) {
-    summaryElement.textContent = `${summary.itemCount} items selected, ${formatPrice(
-      summary.subtotal,
-    )} subtotal`;
-  }
-};
-
 export const mountStorefront = (root: HTMLElement): void => {
-  const selectedProductIds: string[] = [];
+  let cart: CartLine[] = [];
+  let checkoutState = createEmptyCheckoutState();
 
-  root.innerHTML = createStorefrontMarkup(
-    products,
-    calculateCartSummary(selectedProductIds),
-  );
+  const render = (): void => {
+    root.innerHTML = createStorefrontMarkup(
+      products,
+      calculateCartSummaryForCart(cart, products),
+      cart,
+      checkoutState,
+    );
+  };
+
+  render();
 
   root.addEventListener("click", (event) => {
     const target = event.target;
@@ -188,22 +335,139 @@ export const mountStorefront = (root: HTMLElement): void => {
       return;
     }
 
-    const button = target.closest<HTMLButtonElement>("[data-product-id]");
+    const addButton = target.closest<HTMLButtonElement>("[data-product-id]");
 
-    if (!button) {
+    if (addButton) {
+      const product = products.find(
+        (item) => item.id === addButton.dataset.productId,
+      );
+
+      if (!product) {
+        return;
+      }
+
+      cart = addCartItem(cart, product.id);
+      checkoutState = { ...checkoutState, cartError: "", confirmationId: "" };
+      render();
       return;
     }
 
-    const product = products.find(
-      (item) => item.id === button.dataset.productId,
+    const removeButton = target.closest<HTMLButtonElement>(
+      "[data-cart-remove-id]",
     );
 
-    if (!product) {
+    if (removeButton?.dataset.cartRemoveId) {
+      cart = removeCartItem(cart, removeButton.dataset.cartRemoveId);
+      checkoutState = { ...checkoutState, confirmationId: "" };
+      render();
       return;
     }
 
-    selectedProductIds.push(product.id);
-    updateCartSummary(selectedProductIds);
+    const decrementButton = target.closest<HTMLButtonElement>(
+      "[data-cart-decrement-id]",
+    );
+
+    if (decrementButton?.dataset.cartDecrementId) {
+      const line = cart.find(
+        (item) => item.productId === decrementButton.dataset.cartDecrementId,
+      );
+
+      if (!line) {
+        return;
+      }
+
+      cart = updateCartItemQuantity(cart, line.productId, line.quantity - 1);
+      checkoutState = { ...checkoutState, confirmationId: "" };
+      render();
+      return;
+    }
+
+    const incrementButton = target.closest<HTMLButtonElement>(
+      "[data-cart-increment-id]",
+    );
+
+    if (incrementButton?.dataset.cartIncrementId) {
+      cart = addCartItem(cart, incrementButton.dataset.cartIncrementId);
+      checkoutState = { ...checkoutState, confirmationId: "" };
+      render();
+    }
+  });
+
+  root.addEventListener("change", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+
+    if (!target.dataset.cartQuantityId) {
+      return;
+    }
+
+    cart = updateCartItemQuantity(
+      cart,
+      target.dataset.cartQuantityId,
+      Number(target.value),
+    );
+    checkoutState = { ...checkoutState, confirmationId: "" };
+    render();
+  });
+
+  root.addEventListener("submit", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLFormElement)) {
+      return;
+    }
+
+    if (!target.matches("[data-checkout-form]")) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const details: CheckoutDetails = {
+      name:
+        target.querySelector<HTMLInputElement>("[data-checkout-name]")?.value ??
+        "",
+      email:
+        target.querySelector<HTMLInputElement>("[data-checkout-email]")
+          ?.value ?? "",
+      shippingAddress:
+        target.querySelector<HTMLTextAreaElement>("[data-checkout-address]")
+          ?.value ?? "",
+    };
+    const validation = validateCheckout(details);
+
+    if (cart.length === 0) {
+      checkoutState = {
+        details,
+        errors: validation.errors,
+        cartError: "Add at least one item before checkout.",
+        confirmationId: "",
+      };
+      render();
+      return;
+    }
+
+    if (!validation.isValid) {
+      checkoutState = {
+        details,
+        errors: validation.errors,
+        cartError: "",
+        confirmationId: "",
+      };
+      render();
+      return;
+    }
+
+    checkoutState = {
+      details,
+      errors: {},
+      cartError: "",
+      confirmationId: createOrderConfirmationId(cart, details),
+    };
+    render();
   });
 };
 
