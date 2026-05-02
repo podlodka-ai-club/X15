@@ -23,6 +23,14 @@ export type Product = {
   category: string;
 };
 
+export type PriceSort = "featured" | "price-asc" | "price-desc";
+
+export type CatalogFilters = {
+  category: string;
+  searchTerm: string;
+  priceSort: PriceSort;
+};
+
 export const products: Product[] = [
   {
     id: "coffee-kit",
@@ -65,6 +73,43 @@ export const formatPrice = (price: number): string =>
 export { calculateCartSummaryForCart as calculateCartSummary };
 export type { CartLine, CartSummary } from "./cart";
 
+export const defaultCatalogFilters: CatalogFilters = {
+  category: "",
+  searchTerm: "",
+  priceSort: "featured",
+};
+
+export const getVisibleProducts = (
+  catalog: Product[] = products,
+  filters: CatalogFilters = defaultCatalogFilters,
+): Product[] => {
+  const normalizedSearchTerm = filters.searchTerm.trim().toLowerCase();
+  const filteredCatalog = catalog.filter((product) => {
+    const matchesCategory =
+      filters.category === "" || product.category === filters.category;
+    const searchableText = [product.name, product.description, product.category]
+      .join(" ")
+      .toLowerCase();
+    const matchesSearch =
+      normalizedSearchTerm === "" ||
+      searchableText.includes(normalizedSearchTerm);
+
+    return matchesCategory && matchesSearch;
+  });
+
+  const visibleProducts = [...filteredCatalog];
+
+  if (filters.priceSort === "price-asc") {
+    return visibleProducts.sort((first, second) => first.price - second.price);
+  }
+
+  if (filters.priceSort === "price-desc") {
+    return visibleProducts.sort((first, second) => second.price - first.price);
+  }
+
+  return visibleProducts;
+};
+
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
@@ -73,10 +118,71 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
-const createProductCards = (catalog: Product[]): string => {
+const getSelectedAttribute = (isSelected: boolean): string =>
+  isSelected ? " selected" : "";
+
+const getCatalogCategories = (catalog: Product[]): string[] =>
+  Array.from(new Set(catalog.map((product) => product.category)));
+
+const createCatalogControls = (
+  catalog: Product[],
+  filters: CatalogFilters,
+): string => {
+  const categoryOptions = getCatalogCategories(catalog)
+    .map(
+      (category) => `
+        <option value="${escapeHtml(category)}"${getSelectedAttribute(filters.category === category)}>
+          ${escapeHtml(category)}
+        </option>
+      `,
+    )
+    .join("");
+
+  return `
+    <div class="catalog-controls" aria-label="Catalog controls">
+      <label>
+        <span>Category</span>
+        <select data-category-filter>
+          <option value=""${getSelectedAttribute(filters.category === "")}>
+            All categories
+          </option>
+          ${categoryOptions}
+        </select>
+      </label>
+      <label>
+        <span>Search</span>
+        <input
+          type="search"
+          placeholder="Search products"
+          value="${escapeHtml(filters.searchTerm)}"
+          data-product-search
+        />
+      </label>
+      <label>
+        <span>Sort</span>
+        <select data-price-sort>
+          <option value="featured"${getSelectedAttribute(filters.priceSort === "featured")}>
+            Featured
+          </option>
+          <option value="price-asc"${getSelectedAttribute(filters.priceSort === "price-asc")}>
+            Price: low to high
+          </option>
+          <option value="price-desc"${getSelectedAttribute(filters.priceSort === "price-desc")}>
+            Price: high to low
+          </option>
+        </select>
+      </label>
+    </div>
+  `;
+};
+
+const createProductCards = (
+  catalog: Product[],
+  emptyMessage = "No products are available yet.",
+): string => {
   if (catalog.length === 0) {
     return `
-      <p class="empty-state">No products are available yet.</p>
+      <p class="empty-state">${escapeHtml(emptyMessage)}</p>
     `;
   }
 
@@ -266,56 +372,74 @@ const createCheckoutMarkup = (checkoutState: CheckoutState): string => {
   `;
 };
 
+const isPriceSort = (value: string): value is PriceSort =>
+  value === "featured" || value === "price-asc" || value === "price-desc";
+
 export const createStorefrontMarkup = (
   catalog: Product[] = products,
   cartSummary: CartSummary = calculateCartSummaryForCart([], catalog),
-  cart: CartLine[] = [],
+  cartOrFilters: CartLine[] | CatalogFilters = [],
   checkoutState: CheckoutState = createEmptyCheckoutState(),
-): string => `
-  <header class="store-header">
-    <div>
-      <p class="eyebrow">X15 Storefront</p>
-      <h1>Everyday goods for focused work</h1>
-    </div>
-    <nav aria-label="Store sections">
-      <a href="#products">Products</a>
-      <a href="#cart">Cart</a>
-      <a href="#checkout">Checkout</a>
-    </nav>
-    <p class="cart-count" aria-live="polite">
-      <span data-cart-count>${cartSummary.itemCount}</span> items
-    </p>
-  </header>
+  filtersOverride?: CatalogFilters,
+): string => {
+  const cart = Array.isArray(cartOrFilters) ? cartOrFilters : [];
+  const filters = Array.isArray(cartOrFilters)
+    ? (filtersOverride ?? defaultCatalogFilters)
+    : cartOrFilters;
+  const visibleProducts = getVisibleProducts(catalog, filters);
+  const emptyMessage =
+    catalog.length === 0
+      ? "No products are available yet."
+      : "No products match your filters.";
 
-  <main class="store-layout">
-    <section class="products-section" id="products" aria-labelledby="products-title">
-      <div class="section-heading">
-        <p class="eyebrow">Catalog</p>
-        <h2 id="products-title">Featured products</h2>
+  return `
+    <header class="store-header">
+      <div>
+        <p class="eyebrow">X15 Storefront</p>
+        <h1>Everyday goods for focused work</h1>
       </div>
-      <div class="product-grid">
-        ${createProductCards(catalog)}
-      </div>
-    </section>
+      <nav aria-label="Store sections">
+        <a href="#products">Products</a>
+        <a href="#cart">Cart</a>
+        <a href="#checkout">Checkout</a>
+      </nav>
+      <p class="cart-count" aria-live="polite">
+        <span data-cart-count>${cartSummary.itemCount}</span> items
+      </p>
+    </header>
 
-    <aside class="cart-panel" id="cart" aria-labelledby="cart-title">
-      <p class="eyebrow">Cart</p>
-      <h2 id="cart-title">Cart summary</h2>
-      ${createCartLinesMarkup(catalog, cart)}
-      ${createCartTotalsMarkup(cartSummary)}
-    </aside>
+    <main class="store-layout">
+      <section class="products-section" id="products" aria-labelledby="products-title">
+        <div class="section-heading">
+          <p class="eyebrow">Catalog</p>
+          <h2 id="products-title">Featured products</h2>
+        </div>
+        ${createCatalogControls(catalog, filters)}
+        <div class="product-grid" data-product-grid>
+          ${createProductCards(visibleProducts, emptyMessage)}
+        </div>
+      </section>
 
-    <section class="checkout-panel" id="checkout" aria-labelledby="checkout-title">
-      <p class="eyebrow">Checkout</p>
-      <h2 id="checkout-title">Shipping details</h2>
-      ${createCheckoutMarkup(checkoutState)}
-    </section>
-  </main>
-`;
+      <aside class="cart-panel" id="cart" aria-labelledby="cart-title">
+        <p class="eyebrow">Cart</p>
+        <h2 id="cart-title">Cart summary</h2>
+        ${createCartLinesMarkup(catalog, cart)}
+        ${createCartTotalsMarkup(cartSummary)}
+      </aside>
+
+      <section class="checkout-panel" id="checkout" aria-labelledby="checkout-title">
+        <p class="eyebrow">Checkout</p>
+        <h2 id="checkout-title">Shipping details</h2>
+        ${createCheckoutMarkup(checkoutState)}
+      </section>
+    </main>
+  `;
+};
 
 export const mountStorefront = (root: HTMLElement): void => {
   let cart: CartLine[] = [];
   let checkoutState = createEmptyCheckoutState();
+  const catalogFilters: CatalogFilters = { ...defaultCatalogFilters };
 
   const render = (): void => {
     root.innerHTML = createStorefrontMarkup(
@@ -323,10 +447,72 @@ export const mountStorefront = (root: HTMLElement): void => {
       calculateCartSummaryForCart(cart, products),
       cart,
       checkoutState,
+      catalogFilters,
     );
   };
 
   render();
+
+  root.addEventListener("change", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const categorySelect = target.closest("[data-category-filter]");
+
+    if (categorySelect instanceof HTMLSelectElement) {
+      catalogFilters.category = categorySelect.value;
+      render();
+      return;
+    }
+
+    const priceSortSelect = target.closest("[data-price-sort]");
+
+    if (priceSortSelect instanceof HTMLSelectElement) {
+      if (!isPriceSort(priceSortSelect.value)) {
+        return;
+      }
+
+      catalogFilters.priceSort = priceSortSelect.value;
+      render();
+      return;
+    }
+
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+
+    if (!target.dataset.cartQuantityId) {
+      return;
+    }
+
+    cart = updateCartItemQuantity(
+      cart,
+      target.dataset.cartQuantityId,
+      Number(target.value),
+    );
+    checkoutState = { ...checkoutState, confirmationId: "" };
+    render();
+  });
+
+  root.addEventListener("input", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const searchInput = target.closest("[data-product-search]");
+
+    if (!(searchInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    catalogFilters.searchTerm = searchInput.value;
+    render();
+  });
 
   root.addEventListener("click", (event) => {
     const target = event.target;
@@ -391,26 +577,6 @@ export const mountStorefront = (root: HTMLElement): void => {
       checkoutState = { ...checkoutState, confirmationId: "" };
       render();
     }
-  });
-
-  root.addEventListener("change", (event) => {
-    const target = event.target;
-
-    if (!(target instanceof HTMLInputElement)) {
-      return;
-    }
-
-    if (!target.dataset.cartQuantityId) {
-      return;
-    }
-
-    cart = updateCartItemQuantity(
-      cart,
-      target.dataset.cartQuantityId,
-      Number(target.value),
-    );
-    checkoutState = { ...checkoutState, confirmationId: "" };
-    render();
   });
 
   root.addEventListener("submit", (event) => {

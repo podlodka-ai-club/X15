@@ -4,6 +4,7 @@ import {
   calculateCartSummary,
   createStorefrontMarkup,
   formatPrice,
+  getVisibleProducts,
   products,
   type Product,
 } from "./main";
@@ -22,6 +23,30 @@ const sampleProducts: Product[] = [
     description: "Escapes unsafe & quoted text.",
     price: 8,
     category: "Test",
+  },
+];
+
+const catalogProducts: Product[] = [
+  {
+    id: "ceramic-mug",
+    name: "Ceramic Mug",
+    description: "Keeps coffee warm during planning sessions.",
+    price: 18,
+    category: "Kitchen",
+  },
+  {
+    id: "standing-mat",
+    name: "Standing Mat",
+    description: "Supportive mat for focused workspace routines.",
+    price: 46,
+    category: "Workspace",
+  },
+  {
+    id: "paper-notes",
+    name: "Paper Notes",
+    description: "Compact notes for daily sketches.",
+    price: 9,
+    category: "Stationery",
   },
 ];
 
@@ -59,6 +84,86 @@ describe("storefront helpers", () => {
     });
   });
 
+  it("filters products by exact category", () => {
+    expect(
+      getVisibleProducts(catalogProducts, {
+        category: "Workspace",
+        searchTerm: "",
+        priceSort: "featured",
+      }).map((product) => product.id),
+    ).toEqual(["standing-mat"]);
+  });
+
+  it("searches product name, description, and category case-insensitively", () => {
+    expect(
+      getVisibleProducts(catalogProducts, {
+        category: "",
+        searchTerm: "COFFEE",
+        priceSort: "featured",
+      }).map((product) => product.id),
+    ).toEqual(["ceramic-mug"]);
+
+    expect(
+      getVisibleProducts(catalogProducts, {
+        category: "",
+        searchTerm: "workspace",
+        priceSort: "featured",
+      }).map((product) => product.id),
+    ).toEqual(["standing-mat"]);
+  });
+
+  it("sorts products by price ascending and descending", () => {
+    expect(
+      getVisibleProducts(catalogProducts, {
+        category: "",
+        searchTerm: "",
+        priceSort: "price-asc",
+      }).map((product) => product.id),
+    ).toEqual(["paper-notes", "ceramic-mug", "standing-mat"]);
+
+    expect(
+      getVisibleProducts(catalogProducts, {
+        category: "",
+        searchTerm: "",
+        priceSort: "price-desc",
+      }).map((product) => product.id),
+    ).toEqual(["standing-mat", "ceramic-mug", "paper-notes"]);
+  });
+
+  it("combines category filtering, search, and price sorting", () => {
+    expect(
+      getVisibleProducts(
+        [
+          ...catalogProducts,
+          {
+            id: "desk-shelf",
+            name: "Desk Shelf",
+            description: "Raises screens above a focused workspace.",
+            price: 28,
+            category: "Workspace",
+          },
+        ],
+        {
+          category: "Workspace",
+          searchTerm: "focused",
+          priceSort: "price-asc",
+        },
+      ).map((product) => product.id),
+    ).toEqual(["desk-shelf", "standing-mat"]);
+  });
+
+  it("does not mutate the source catalog when sorting", () => {
+    const originalOrder = catalogProducts.map((product) => product.id);
+
+    getVisibleProducts(catalogProducts, {
+      category: "",
+      searchTerm: "",
+      priceSort: "price-asc",
+    });
+
+    expect(catalogProducts.map((product) => product.id)).toEqual(originalOrder);
+  });
+
   it("includes required storefront shell sections", () => {
     const markup = createStorefrontMarkup(sampleProducts);
 
@@ -66,6 +171,15 @@ describe("storefront helpers", () => {
     expect(markup).toContain("product-grid");
     expect(markup).toContain("Cart summary");
     expect(markup).toContain("Shipping details");
+  });
+
+  it("renders catalog controls and product grid hooks", () => {
+    const markup = createStorefrontMarkup(sampleProducts);
+
+    expect(markup).toContain("data-category-filter");
+    expect(markup).toContain("data-product-search");
+    expect(markup).toContain("data-price-sort");
+    expect(markup).toContain("data-product-grid");
   });
 
   it("renders every product card name", () => {
@@ -96,6 +210,20 @@ describe("storefront helpers", () => {
     expect(createStorefrontMarkup([])).toContain(
       "No products are available yet.",
     );
+  });
+
+  it("renders a filtered empty catalog message", () => {
+    expect(
+      createStorefrontMarkup(
+        sampleProducts,
+        calculateCartSummary([], sampleProducts),
+        {
+          category: "Missing",
+          searchTerm: "",
+          priceSort: "featured",
+        },
+      ),
+    ).toContain("No products match your filters.");
   });
 
   it("escapes product text before rendering markup", () => {
