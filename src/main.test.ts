@@ -11,6 +11,16 @@ const importStorefront = async () => {
 const getProductNames = (): string[] =>
   [...document.querySelectorAll('.product-card__title')].map((title) => title.textContent ?? '');
 
+const getRequiredElement = <ElementType extends Element>(selector: string): ElementType => {
+  const element = document.querySelector<ElementType>(selector);
+
+  if (!element) {
+    throw new Error(`Expected element matching ${selector}`);
+  }
+
+  return element;
+};
+
 describe('renderStorefront', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -137,6 +147,7 @@ describe('renderStorefront', () => {
     expect(cards).toHaveLength(4);
     expect(document.body.textContent).toContain('AI Workflow Kit');
     expect(document.body.textContent).toContain('Launch Pack');
+    expect(document.body.textContent).toContain('Add to cart');
   });
 
   it('renders catalog controls', async () => {
@@ -201,21 +212,118 @@ describe('renderStorefront', () => {
     );
   });
 
-  it('renders the cart summary placeholder', async () => {
+  it('renders empty cart and unavailable checkout states', async () => {
     await importStorefront();
 
-    expect(document.querySelector('.cart-summary')?.textContent).toContain('0 items | $0 total');
-    expect(document.querySelector('.cart-summary')?.textContent).toContain(
-      'Selected products will appear here',
-    );
-  });
-
-  it('renders the checkout placeholder', async () => {
-    await importStorefront();
-
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('Your cart is empty.');
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('0 items | $0.00 total');
     expect(document.querySelector('.checkout-placeholder')?.textContent).toContain('Checkout');
     expect(document.querySelector('.checkout-placeholder__button')?.textContent).toBe(
       'Checkout unavailable',
     );
+    expect(getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').disabled).toBe(
+      true,
+    );
+  });
+
+  it('adds products to the cart and increments quantity without duplicate rows', async () => {
+    await importStorefront();
+
+    const addButton = getRequiredElement<HTMLButtonElement>(
+      '.product-card[data-product-id="workflow-kit"] .product-card__button',
+    );
+
+    addButton.click();
+
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('AI Workflow Kit');
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('Subtotal$49.00');
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('Shipping$12.00');
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('Tax$3.92');
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('Total$64.92');
+    expect(getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').disabled).toBe(
+      false,
+    );
+
+    addButton.click();
+
+    expect(document.querySelectorAll('.cart-summary__row')).toHaveLength(1);
+    expect(getRequiredElement<HTMLInputElement>('.cart-summary__quantity-input').value).toBe('2');
+    expect(document.querySelector('.cart-summary')?.textContent).toContain(
+      '2 items | $117.84 total',
+    );
+  });
+
+  it('updates and removes cart quantities', async () => {
+    await importStorefront();
+
+    getRequiredElement<HTMLButtonElement>(
+      '.product-card[data-product-id="workflow-kit"] .product-card__button',
+    ).click();
+
+    const quantityInput = getRequiredElement<HTMLInputElement>('.cart-summary__quantity-input');
+    quantityInput.value = '3';
+    quantityInput.dispatchEvent(new Event('change'));
+
+    expect(document.querySelector('.cart-summary')?.textContent).toContain(
+      '3 items | $170.76 total',
+    );
+
+    getRequiredElement<HTMLButtonElement>('.cart-summary__remove').click();
+
+    expect(document.querySelector('.cart-summary')?.textContent).toContain('Your cart is empty.');
+    expect(getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').disabled).toBe(
+      true,
+    );
+  });
+
+  it('validates checkout details before confirming an order', async () => {
+    await importStorefront();
+
+    getRequiredElement<HTMLButtonElement>(
+      '.product-card[data-product-id="workflow-kit"] .product-card__button',
+    ).click();
+
+    getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').click();
+
+    expect(document.querySelector('.checkout-placeholder')?.textContent).toContain(
+      'Enter your name.',
+    );
+    expect(document.querySelector('.checkout-placeholder')?.textContent).toContain(
+      'Enter your email.',
+    );
+    expect(document.querySelector('.checkout-placeholder')?.textContent).toContain(
+      'Enter a shipping address.',
+    );
+  });
+
+  it('submits valid checkout details and shows a deterministic confirmation', async () => {
+    await importStorefront();
+
+    getRequiredElement<HTMLButtonElement>(
+      '.product-card[data-product-id="workflow-kit"] .product-card__button',
+    ).click();
+
+    const nameInput = getRequiredElement<HTMLInputElement>('input[name="name"]');
+    const emailInput = getRequiredElement<HTMLInputElement>('input[name="email"]');
+    const addressInput = getRequiredElement<HTMLTextAreaElement>(
+      'textarea[name="shippingAddress"]',
+    );
+
+    nameInput.value = 'Ada Lovelace';
+    nameInput.dispatchEvent(new Event('input'));
+    emailInput.value = 'ada@example.com';
+    emailInput.dispatchEvent(new Event('input'));
+    addressInput.value = '12 Engine Way';
+    addressInput.dispatchEvent(new Event('input'));
+
+    getRequiredElement<HTMLButtonElement>('.checkout-placeholder__button').click();
+
+    expect(document.querySelector('.checkout-confirmation')?.textContent).toContain(
+      'Order confirmed',
+    );
+    expect(document.querySelector('.checkout-confirmation')?.textContent).toContain(
+      'X15-1-6492-9199',
+    );
+    expect(document.querySelector('.checkout-confirmation')?.textContent).toContain('$64.92');
   });
 });
