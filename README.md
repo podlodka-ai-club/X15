@@ -310,33 +310,83 @@ Workflows live in `.archon/workflows/` and bundled defaults live in
 `.archon/workflows/defaults/`. A workflow is YAML:
 
 ```yaml
-name: archon-small-interactive-prd
-description: Clarify a small idea, approve a plan, then implement it.
+name: archon-issue-to-pr
+description: Classify an issue, route conditionally, implement, review in parallel, and self-fix.
 
 provider: codex
 model: gpt-5.5
 interactive: true
 
 nodes:
-  - id: brainstorm
+  - id: classify
     prompt: |
-      Restate the request, then ask three focused questions.
+      Classify the request as BUG, FEATURE, or UNCLEAR.
+    output_format:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [BUG, FEATURE, UNCLEAR]
+        reason:
+          type: string
+      required: [kind, reason]
 
-  - id: brainstorm-gate
+  - id: investigate
+    command: archon-investigate-issue
+    when: "$classify.output.kind == 'BUG'"
+    depends_on: [classify]
+
+  - id: plan
+    command: archon-create-plan
+    when: "$classify.output.kind == 'FEATURE'"
+    depends_on: [classify]
+
+  - id: ask-human
     approval:
-      message: Answer the questions so I can write the plan.
+      message: "$classify.output.reason"
       capture_response: true
-    depends_on: [brainstorm]
-
-  - id: write-plan
-    prompt: |
-      Inspect the codebase and write a small implementation plan.
-    depends_on: [brainstorm-gate]
+    when: "$classify.output.kind == 'UNCLEAR'"
+    depends_on: [classify]
 
   - id: implement
     command: archon-implement
     context: fresh
-    depends_on: [write-plan]
+    depends_on: [investigate, plan, ask-human]
+    trigger_rule: none_failed_min_one_success
+
+  - id: validate
+    bash: "bun run validate"
+    depends_on: [implement]
+
+  # These three nodes share the same dependency, so Archon can run them in parallel.
+  - id: code-review
+    command: archon-code-review-agent
+    context: fresh
+    depends_on: [validate]
+
+  - id: docs-review
+    command: archon-docs-impact-agent
+    context: fresh
+    depends_on: [validate]
+
+  - id: test-review
+    command: archon-test-coverage-agent
+    context: fresh
+    depends_on: [validate]
+
+  - id: self-fix
+    loop:
+      prompt: |
+        Read the review outputs. Fix the next actionable issue, validate, and stop
+        only when every review item is resolved. End with ALL_FIXES_COMPLETE.
+      until: ALL_FIXES_COMPLETE
+      max_iterations: 3
+      fresh_context: true
+    depends_on: [code-review, docs-review, test-review]
+
+  - id: create-pr
+    command: archon-create-pr
+    depends_on: [self-fix]
 ```
 
 Nodes declare `depends_on`, so Archon can run the graph in topological order.
