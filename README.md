@@ -145,16 +145,12 @@ always-on binary/systemd deployment, see
 
 ### Local Source Install
 
-Use this when you are developing Archon or running it manually.
+Use this when you are developing this fork or running it manually. Start from
+your fork checkout, not the upstream `coleam00/Archon` repository.
 
 ```bash
-# Prerequisites
-curl -fsSL https://bun.sh/install | bash
-sudo apt install -y git gh
-curl -fsSL https://claude.ai/install.sh | bash
-
-# Clone and install
-git clone https://github.com/coleam00/Archon.git
+# Clone your fork, then install
+git clone <your-archon-fork-url>
 cd Archon
 bun install
 
