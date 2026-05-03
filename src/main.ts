@@ -1,5 +1,12 @@
 import "./styles.css";
 
+import {
+  defaultCatalogFilters,
+  getCatalogProducts,
+  getCategories,
+  type CatalogFilters,
+  type CatalogSort,
+} from "./catalog";
 import { products, type Product } from "./products";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -40,6 +47,120 @@ export function renderProductCard(product: Product): HTMLElement {
   return card;
 }
 
+export function updateProductGrid(
+  productGrid: HTMLElement,
+  productList: Product[],
+): void {
+  productGrid.replaceChildren();
+
+  if (productList.length === 0) {
+    const emptyState = document.createElement("p");
+    emptyState.className = "catalog__empty";
+    emptyState.textContent = "No products are available yet.";
+    productGrid.append(emptyState);
+  } else {
+    productGrid.append(
+      ...productList.map((product) => renderProductCard(product)),
+    );
+  }
+}
+
+export function renderCatalogControls(
+  productList: Product[],
+  filters: CatalogFilters,
+  onChange: (filters: CatalogFilters) => void,
+): HTMLElement {
+  let currentFilters = filters;
+
+  const controls = document.createElement("div");
+  controls.className = "catalog__controls";
+
+  const categoryLabel = document.createElement("label");
+  categoryLabel.className = "catalog__control";
+  categoryLabel.textContent = "Category";
+
+  const categorySelect = document.createElement("select");
+  categorySelect.name = "category";
+
+  const allCategoryOption = document.createElement("option");
+  allCategoryOption.value = "all";
+  allCategoryOption.textContent = "All categories";
+  categorySelect.append(allCategoryOption);
+
+  categorySelect.append(
+    ...getCategories(productList).map((category) => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = category;
+
+      return option;
+    }),
+  );
+  categorySelect.value = filters.category;
+
+  const searchLabel = document.createElement("label");
+  searchLabel.className = "catalog__control";
+  searchLabel.textContent = "Search";
+
+  const searchInput = document.createElement("input");
+  searchInput.name = "search";
+  searchInput.type = "search";
+  searchInput.placeholder = "Search products";
+  searchInput.value = filters.query;
+
+  const sortLabel = document.createElement("label");
+  sortLabel.className = "catalog__control";
+  sortLabel.textContent = "Sort";
+
+  const sortSelect = document.createElement("select");
+  sortSelect.name = "sort";
+
+  const sortOptions: { label: string; value: CatalogSort }[] = [
+    { label: "Featured", value: "featured" },
+    { label: "Price: low to high", value: "price-asc" },
+    { label: "Price: high to low", value: "price-desc" },
+  ];
+
+  sortSelect.append(
+    ...sortOptions.map((sortOption) => {
+      const option = document.createElement("option");
+      option.value = sortOption.value;
+      option.textContent = sortOption.label;
+
+      return option;
+    }),
+  );
+  sortSelect.value = filters.sort;
+
+  categorySelect.addEventListener("change", () => {
+    currentFilters = {
+      ...currentFilters,
+      category: categorySelect.value as CatalogFilters["category"],
+    };
+    onChange(currentFilters);
+  });
+
+  searchInput.addEventListener("input", () => {
+    currentFilters = { ...currentFilters, query: searchInput.value };
+    onChange(currentFilters);
+  });
+
+  sortSelect.addEventListener("change", () => {
+    currentFilters = {
+      ...currentFilters,
+      sort: sortSelect.value as CatalogSort,
+    };
+    onChange(currentFilters);
+  });
+
+  categoryLabel.append(categorySelect);
+  searchLabel.append(searchInput);
+  sortLabel.append(sortSelect);
+  controls.append(categoryLabel, searchLabel, sortLabel);
+
+  return controls;
+}
+
 export function renderStorefront(
   root: HTMLElement,
   productList = products,
@@ -76,21 +197,23 @@ export function renderStorefront(
   catalogHeading.id = "catalog-heading";
   catalogHeading.textContent = "Products";
 
+  let filters: CatalogFilters = { ...defaultCatalogFilters };
+
   const productGrid = document.createElement("div");
   productGrid.className = "product-grid";
 
-  if (productList.length === 0) {
-    const emptyState = document.createElement("p");
-    emptyState.className = "catalog__empty";
-    emptyState.textContent = "No products are available yet.";
-    productGrid.append(emptyState);
-  } else {
-    productGrid.append(
-      ...productList.map((product) => renderProductCard(product)),
-    );
-  }
+  const catalogControls = renderCatalogControls(
+    productList,
+    filters,
+    (nextFilters) => {
+      filters = nextFilters;
+      updateProductGrid(productGrid, getCatalogProducts(productList, filters));
+    },
+  );
 
-  catalogSection.append(catalogHeading, productGrid);
+  updateProductGrid(productGrid, getCatalogProducts(productList, filters));
+
+  catalogSection.append(catalogHeading, catalogControls, productGrid);
 
   const sidebar = document.createElement("aside");
   sidebar.className = "checkout-panel";
