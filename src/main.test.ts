@@ -21,6 +21,7 @@ describe("storefront", () => {
       id: "test-product",
       name: "Test Product",
       description: "Useful test merchandise.",
+      category: "Office",
       priceCents: 1299,
     };
 
@@ -59,6 +60,73 @@ describe("storefront", () => {
     expect(root.querySelector("button:disabled")?.textContent).toBe(
       "Checkout placeholder",
     );
+  });
+
+  it("renders catalog category, search, and sort controls", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    expect(root.querySelector('select[name="category"]')).not.toBeNull();
+    expect(root.querySelector('input[name="search"]')).not.toBeNull();
+    expect(root.querySelector('select[name="sort"]')).not.toBeNull();
+    expect(root.textContent).toContain("All categories");
+    expect(root.textContent).toContain("Price: low to high");
+  });
+
+  it("filters product cards when category changes", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    const categorySelect = root.querySelector<HTMLSelectElement>(
+      'select[name="category"]',
+    );
+    categorySelect!.value = "Home";
+    categorySelect!.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const cards = root.querySelectorAll<HTMLElement>(".product-card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.dataset.productId).toBe("ceramic-mug-set");
+  });
+
+  it("filters product cards when a search query is typed", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    const searchInput = root.querySelector<HTMLInputElement>(
+      'input[name="search"]',
+    );
+    searchInput!.value = "planner";
+    searchInput!.dispatchEvent(new Event("input", { bubbles: true }));
+
+    const cards = root.querySelectorAll<HTMLElement>(".product-card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.dataset.productId).toBe("desk-planner");
+  });
+
+  it("updates product card order when price sort changes", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    const sortSelect = root.querySelector<HTMLSelectElement>(
+      'select[name="sort"]',
+    );
+    sortSelect!.value = "price-asc";
+    sortSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(
+      Array.from(root.querySelectorAll<HTMLElement>(".product-card")).map(
+        (card) => card.dataset.productId,
+      ),
+    ).toEqual([
+      "desk-planner",
+      "ceramic-mug-set",
+      "linen-overshirt",
+      "studio-backpack",
+    ]);
   });
 
   it("renders an empty catalog state without crashing", () => {
