@@ -1,0 +1,9 @@
+docs:
+  path: packages/docs-web/src/content/docs
+
+backlog:
+  projects:
+    - name: X15
+      repo: podlodka-ai-club/X15
+      cwd: /home/ubuntu/.archon/workspaces/podlodka-ai-club/X15/source
+      areaLockPolicy: none

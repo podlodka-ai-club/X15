@@ -1,0 +1,83 @@
+name: archon-resolve-conflicts
+description: |
+  Use when: PR has merge conflicts that need resolution.
+  Triggers: "resolve conflicts", "fix merge conflicts", "rebase this PR", "resolve this",
+            "fix conflicts", "merge conflicts", "rebase and fix".
+  Does: Fetches latest base branch -> analyzes conflicts -> auto-resolves simple conflicts ->
+        presents options for complex conflicts -> commits and pushes resolution.
+  NOT for: PRs without conflicts, general rebasing without conflicts, squashing commits.
+
+  This workflow helps resolve merge conflicts by analyzing the conflicting changes,
+  automatically resolving where intent is clear, and presenting options for complex conflicts.
+
+provider: codex
+model: gpt-5.5
+modelReasoningEffort: medium
+
+nodes:
+  - id: resolve
+    command: archon-resolve-merge-conflicts
+
+  - id: merge-if-auto
+    depends_on: [resolve]
+    bash: |
+      set -euo pipefail
+
+      REQUEST=$(cat <<'EOF'
+      $ARGUMENTS
+      EOF
+      )
+
+      CONTEXT_JSON=$(printf '%s\n' "$REQUEST" | sed -nE 's/^ARCHON_BACKLOG_CONTEXT_JSON: (.+)$/\1/p' | head -1)
+      if [ -z "$CONTEXT_JSON" ]; then
+        echo "Missing ARCHON_BACKLOG_CONTEXT_JSON in workflow arguments; leaving PR open." >&2
+        exit 0
+      fi
+
+      PR_NUMBER=$(printf '%s' "$CONTEXT_JSON" | jq -r '.prNumber // empty')
+      if [ -z "$PR_NUMBER" ]; then
+        echo "Missing prNumber in ARCHON_BACKLOG_CONTEXT_JSON; leaving PR open." >&2
+        exit 0
+      fi
+
+      ISSUE_NUM=$(printf '%s' "$CONTEXT_JSON" | jq -r '.issueNumber // empty')
+      if [ -z "$ISSUE_NUM" ]; then
+        echo "Missing issueNumber in ARCHON_BACKLOG_CONTEXT_JSON for PR #$PR_NUMBER; leaving PR open." >&2
+        exit 0
+      fi
+
+      if ! gh issue view "$ISSUE_NUM" --json labels --jq '.labels[].name' | grep -qx 'archon:auto-merge'; then
+        echo "Issue #$ISSUE_NUM is not labeled archon:auto-merge; leaving PR #$PR_NUMBER open."
+        exit 0
+      fi
+
+      MERGEABLE="UNKNOWN"
+      for attempt in 1 2 3 4 5; do
+        PR_STATE=$(gh pr view "$PR_NUMBER" --json state,isDraft,mergeable --jq '.state + " " + (.isDraft|tostring) + " " + .mergeable')
+        STATE=$(printf '%s\n' "$PR_STATE" | awk '{print $1}')
+        IS_DRAFT=$(printf '%s\n' "$PR_STATE" | awk '{print $2}')
+        MERGEABLE=$(printf '%s\n' "$PR_STATE" | awk '{print $3}')
+
+        if [ "$MERGEABLE" != "UNKNOWN" ]; then
+          break
+        fi
+
+        echo "PR #$PR_NUMBER mergeability is UNKNOWN; waiting for GitHub recalculation ($attempt/5)."
+        sleep 3
+      done
+
+      if [ "$STATE" != "OPEN" ]; then
+        echo "PR #$PR_NUMBER is $STATE; nothing to merge."
+        exit 0
+      fi
+      if [ "$IS_DRAFT" != "false" ]; then
+        echo "PR #$PR_NUMBER is draft; leaving open."
+        exit 0
+      fi
+      if [ "$MERGEABLE" != "MERGEABLE" ]; then
+        echo "PR #$PR_NUMBER is not mergeable after conflict resolution: $MERGEABLE" >&2
+        exit 1
+      fi
+
+      gh pr merge "$PR_NUMBER" --squash
+      echo "Merged PR #$PR_NUMBER after conflict resolution."
