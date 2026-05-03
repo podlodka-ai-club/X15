@@ -137,6 +137,137 @@ when all of these are true:
 
 Everything else stops at `archon:ready-for-review` for a human.
 
+## Install From Scratch
+
+For the full product setup guide, see [ARCHON.md](./ARCHON.md). For the
+always-on binary/systemd deployment, see
+[Binary systemd and ngrok webhooks](./packages/docs-web/src/content/docs/deployment/binary-systemd-webhook.md).
+
+### Local Source Install
+
+Use this when you are developing Archon or running it manually.
+
+```bash
+# Prerequisites
+curl -fsSL https://bun.sh/install | bash
+sudo apt install -y git gh
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Clone and install
+git clone https://github.com/coleam00/Archon.git
+cd Archon
+bun install
+
+# Run server + Web UI
+bun run dev
+```
+
+Useful checks:
+
+```bash
+curl -fsS http://127.0.0.1:3090/api/health
+bun run validate
+```
+
+### Always-On Binary With systemd
+
+Use this when Archon should run continuously on a Linux host. The example uses
+user-level systemd services, an env file owned by Archon, and a compiled binary.
+
+Build or place the binary:
+
+```bash
+bun install
+bun run build:binaries
+install -m 0755 dist/binaries/archon-linux-x64 ~/.local/bin/archon
+```
+
+Create `~/.archon/.env`:
+
+```bash
+mkdir -p ~/.archon
+cat > ~/.archon/.env <<'EOF'
+ARCHON_HOME=/home/ubuntu/.archon
+CLAUDE_USE_GLOBAL_AUTH=true
+CLAUDE_BIN_PATH=/home/ubuntu/.local/bin/claude
+GH_TOKEN=...
+GITHUB_TOKEN=...
+WEBHOOK_SECRET=...
+EOF
+chmod 600 ~/.archon/.env
+```
+
+Create `~/.config/systemd/user/archon.service`:
+
+```ini
+[Unit]
+Description=Archon server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/projects/misc/Archon
+Environment=HOME=/home/ubuntu
+Environment=ARCHON_HOME=/home/ubuntu/.archon
+Environment=PORT=3090
+EnvironmentFile=-/home/ubuntu/.archon/.env
+EnvironmentFile=-/home/ubuntu/projects/misc/Archon/.archon/.env
+ExecStart=/home/ubuntu/.local/bin/archon serve --port 3090
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and verify:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now archon.service
+loginctl enable-linger "$USER"
+
+systemctl --user status archon.service
+journalctl --user -u archon.service -f
+curl -fsS http://127.0.0.1:3090/api/health
+```
+
+Optional backlog automation service:
+
+```ini
+[Unit]
+Description=Archon backlog orchestrator
+After=network-online.target archon.service
+Wants=network-online.target archon.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/projects/misc/Archon
+Environment=HOME=/home/ubuntu
+Environment=ARCHON_HOME=/home/ubuntu/.archon
+EnvironmentFile=-/home/ubuntu/.archon/.env
+EnvironmentFile=-/home/ubuntu/projects/misc/Archon/.archon/.env
+ExecStart=/home/ubuntu/.local/bin/archon backlog run --poll-interval 60
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
+```
+
+Before enabling the backlog service, configure `.archon/config.yaml`, run
+`archon backlog setup`, and verify `archon backlog status`. Then:
+
+```bash
+systemctl --user enable --now archon-orchestrator.service
+journalctl --user -u archon-orchestrator.service -f
+```
+
 ## Running The Harness
 
 From the CLI:
