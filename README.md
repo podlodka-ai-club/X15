@@ -23,7 +23,7 @@ creation behavior is defined by customizable Archon YAML workflows.
 
 ## The Harness
 
-The important demo is not "an agent wrote code." The important demo is that the
+The important proof is not "an agent wrote code." The important proof is that the
 agent is inside a governed loop.
 
 `@archon/backlog-orchestrator` is that loop. It treats GitHub as the visible
@@ -289,7 +289,7 @@ Typical project configuration lives in `.archon/config.yaml`:
 ```yaml
 backlog:
   projects:
-    - name: demo
+    - name: project
       repo: owner/repo
       cwd: /path/to/repo
       maxParallelWorkflows: 2
@@ -487,7 +487,7 @@ The Web UI subscribes to workflow events to show live progress, tool calls,
 approval waits, errors, and completed runs. Chat platforms can receive either
 streamed or batched output depending on adapter capabilities.
 
-## Demo Smoke
+## Smoke Tests
 
 The backlog orchestrator has deterministic fixture E2E tests and opt-in live
 GitHub smoke scenarios.
