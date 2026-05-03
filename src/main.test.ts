@@ -49,16 +49,134 @@ describe("storefront", () => {
     );
   });
 
-  it("renders cart and checkout placeholders", () => {
+  it("renders an empty cart state and disabled checkout submit", () => {
     const root = document.createElement("div");
 
     renderStorefront(root);
 
     expect(root.textContent).toContain("Cart Summary");
-    expect(root.textContent).toContain("0 items - $0.00");
+    expect(root.textContent).toContain("0 items");
+    expect(root.textContent).toContain("Your cart is empty.");
     expect(root.textContent).toContain("Checkout");
-    expect(root.querySelector("button:disabled")?.textContent).toBe(
-      "Checkout placeholder",
+    expect(
+      root.querySelector<HTMLButtonElement>("button[type='submit']")?.disabled,
+    ).toBe(true);
+  });
+
+  it("updates the cart count and total when adding a product", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    root
+      .querySelector<HTMLButtonElement>(
+        `[aria-label="Add ${products[0].name} to cart"]`,
+      )
+      ?.click();
+
+    expect(root.querySelector(".cart-count")?.textContent).toBe("1 items");
+    expect(root.textContent).toContain(products[0].name);
+    expect(root.textContent).toContain("Total");
+    expect(root.textContent).toContain("$114.08");
+  });
+
+  it("increments quantity when adding the same product twice", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    const addButton = root.querySelector<HTMLButtonElement>(
+      `[aria-label="Add ${products[0].name} to cart"]`,
+    );
+    addButton?.click();
+    addButton?.click();
+
+    expect(root.querySelector(".cart-count")?.textContent).toBe("2 items");
+    expect(
+      root.querySelector<HTMLInputElement>(
+        `[aria-label="Quantity for ${products[0].name}"]`,
+      )?.value,
+    ).toBe("2");
+  });
+
+  it("removes an item and restores the empty cart state", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    root
+      .querySelector<HTMLButtonElement>(
+        `[aria-label="Add ${products[0].name} to cart"]`,
+      )
+      ?.click();
+    root
+      .querySelector<HTMLButtonElement>(
+        `[aria-label="Remove ${products[0].name} from cart"]`,
+      )
+      ?.click();
+
+    expect(root.querySelector(".cart-count")?.textContent).toBe("0 items");
+    expect(root.textContent).toContain("Your cart is empty.");
+    expect(
+      root.querySelector<HTMLButtonElement>("button[type='submit']")?.disabled,
+    ).toBe(true);
+  });
+
+  it("shows validation errors after invalid checkout submit", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    root
+      .querySelector<HTMLButtonElement>(
+        `[aria-label="Add ${products[0].name} to cart"]`,
+      )
+      ?.click();
+    root
+      .querySelector<HTMLFormElement>(".checkout-form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+    expect(root.textContent).toContain("Name is required.");
+    expect(root.textContent).toContain("Email is required.");
+    expect(root.textContent).toContain("Shipping address is required.");
+  });
+
+  it("shows a deterministic order confirmation after valid checkout submit", () => {
+    const root = document.createElement("div");
+
+    renderStorefront(root);
+
+    root
+      .querySelector<HTMLButtonElement>(
+        `[aria-label="Add ${products[0].name} to cart"]`,
+      )
+      ?.click();
+
+    const nameInput =
+      root.querySelector<HTMLInputElement>("input[name='name']");
+    const emailInput = root.querySelector<HTMLInputElement>(
+      "input[name='email']",
+    );
+    const addressInput = root.querySelector<HTMLTextAreaElement>(
+      "textarea[name='shippingAddress']",
+    );
+
+    if (nameInput) {
+      nameInput.value = "Avery Stone";
+    }
+    if (emailInput) {
+      emailInput.value = "avery@example.com";
+    }
+    if (addressInput) {
+      addressInput.value = "12 Market Street";
+    }
+
+    root
+      .querySelector<HTMLFormElement>(".checkout-form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+    expect(root.querySelector(".confirmation")?.textContent).toMatch(
+      /^Confirmation ORDER-[0-9A-Z]{8}$/,
     );
   });
 

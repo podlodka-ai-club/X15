@@ -177,6 +177,86 @@ button:disabled {
   font-size: 1.35rem;
 }
 
+.cart-count {
+  font-weight: 700;
+}
+
+.cart-list,
+.checkout-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.cart-item {
+  border-top: 1px solid #ded9ce;
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.8rem;
+}
+
+.cart-item__controls {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.cart-item__controls input {
+  border: 1px solid #ded9ce;
+  border-radius: 6px;
+  color: #202124;
+  font: inherit;
+  padding: 0.55rem;
+  width: 4.5rem;
+}
+
+.cart-totals {
+  display: grid;
+  gap: 0.45rem 0.75rem;
+  grid-template-columns: 1fr auto;
+  margin: 0;
+}
+
+.cart-totals dt {
+  color: #5f655f;
+}
+
+.cart-totals dd {
+  font-weight: 700;
+  margin: 0;
+}
+
+.checkout-form label {
+  color: #202124;
+  display: grid;
+  font-weight: 700;
+  gap: 0.35rem;
+}
+
+.checkout-form input,
+.checkout-form textarea {
+  border: 1px solid #ded9ce;
+  border-radius: 6px;
+  color: #202124;
+  font: inherit;
+  padding: 0.65rem;
+  resize: vertical;
+}
+
+.form-error {
+  color: #8b2f25;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.confirmation {
+  background: #edf7f3;
+  border: 1px solid #9bc5b8;
+  border-radius: 8px;
+  color: #1f6f5b;
+  font-weight: 800;
+  padding: 0.8rem;
+}
+
 @media (max-width: 820px) {
   .storefront {
     padding: 2rem 0;
